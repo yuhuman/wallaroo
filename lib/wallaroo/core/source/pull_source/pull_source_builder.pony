@@ -16,53 +16,48 @@ Copyright 2017 The Wallaroo Authors.
 
 */
 
-use "collections"
-use "wallaroo/core/boundary"
 use "wallaroo/core/common"
-use "wallaroo/ent/data_receiver"
-use "wallaroo/ent/recovery"
 use "wallaroo/core/metrics"
-use "wallaroo/core/routing"
+use "wallaroo/core/source"
 use "wallaroo/core/topology"
 
-trait val SourceBuilder
-  fun name(): String
-  fun apply(event_log: EventLog, auth: AmbientAuth, target_router: Router,
-    env: Env): SourceNotify iso^
-  fun val update_router(router: Router): SourceBuilder
-
-class val BasicSourceBuilder[In: Any val, SH: SourceHandler[In] val] is
-  SourceBuilder
+class val TypedPullSourceBuilder[In: Any val] is SourceBuilder
   let _app_name: String
   let _worker_name: String
-  let _name: String
+  let _pipeline_name: String
   let _runner_builder: RunnerBuilder
-  let _handler: SH
+  //!@
+  // let _handler: SH
   let _router: Router
   let _metrics_conn: MetricsSink
   let _pre_state_target_ids: Array[StepId] val
   let _metrics_reporter: MetricsReporter
-  let _source_notify_builder: SourceNotifyBuilder[In, SH]
+  //!@
+  // let _source_notify_builder: SourceNotifyBuilder[In, SH]
 
   new val create(app_name: String, worker_name: String,
-    name': String,
-    runner_builder: RunnerBuilder,
-    handler: SH,
+    pipeline_name: String, runner_builder: RunnerBuilder,
+    //!@
+    // handler: SH,
     router: Router, metrics_conn: MetricsSink,
     pre_state_target_ids: Array[StepId] val = recover Array[StepId] end,
     metrics_reporter: MetricsReporter iso,
-    source_notify_builder: SourceNotifyBuilder[In, SH])
+    //!@
+    // source_notify_builder: SourceNotifyBuilder[In, SH]
+    )
   =>
     _app_name = app_name
     _worker_name = worker_name
-    _name = name'
+    _pipeline_name = pipeline_name
     _runner_builder = runner_builder
-    _handler = handler
+    //!@
+    // _handler = handler
     _router = router
     _metrics_conn = metrics_conn
     _pre_state_target_ids = pre_state_target_ids
     _metrics_reporter = consume metrics_reporter
-    _source_notify_builder = source_notify_builder
+    //!@
+    // _source_notify_builder = source_notify_builder
 
   fun pipeline_name(): String => _name
 
@@ -74,36 +69,41 @@ class val BasicSourceBuilder[In: Any val, SH: SourceHandler[In] val] is
       _pre_state_target_ids)
 
   fun val update_router(router: Router): SourceBuilder =>
-    BasicSourceBuilder[In, SH](_app_name, _worker_name, _name, _runner_builder,
-      _handler, router, _metrics_conn, _pre_state_target_ids,
-      _metrics_reporter.clone(), _source_notify_builder)
+    TypedPullSourceBuilder[In](_app_name, _worker_name, _pipeline_name,
+      _runner_builder, _handler, router, _metrics_conn, _pre_state_target_ids,
+      _metrics_reporter.clone(),
+      //!@
+      //_source_notify_builder
+      )
 
-interface val SourceBuilderBuilder
-  fun name(): String
+class val TypedPullSourceBuilderBuilder[In: Any val]
+  let _app_name: String
+  let _pipeline_name: String
+  //!@
+  // let _handler: FramedSourceHandler[In] val
+
+  new val create(app_name: String, pipeline_name: String,
+    //!@
+    // handler: FramedSourceHandler[In] val)
+    )
+  =>
+    _app_name = app_name
+    _pipeline_name = pipeline_name
+    //!@
+    // _handler = handler
+
+  fun name(): String => _name
+
   fun apply(runner_builder: RunnerBuilder, router: Router,
     metrics_conn: MetricsSink,
     pre_state_target_ids: Array[StepId] val = recover Array[StepId] end,
-    worker_name: String,
-    metrics_reporter: MetricsReporter iso):
+    worker_name: String, metrics_reporter: MetricsReporter iso):
       SourceBuilder
+  =>
+    TypedPullSourceBuilder[In](_app_name, worker_name,
+      _pipeline_name, runner_builder, _handler, router,
+      metrics_conn, pre_state_target_ids, consume metrics_reporter,
+      //!@
+      // TCPFramedSourceNotifyBuilder[In])
+      )
 
-interface val SourceConfig[In: Any val]
-  fun source_listener_builder_builder(): SourceListenerBuilderBuilder
-
-  fun source_builder(app_name: String, pipeline_name: String):
-    SourceBuilderBuilder
-
-interface tag Source is (DisposableActor & BoundaryUpdateable)
-  be update_router(router: PartitionRouter)
-  be add_boundary_builders(
-    boundary_builders: Map[String, OutgoingBoundaryBuilder] val)
-  be reconnect_boundary(target_worker_name: String)
-  be mute(c: Consumer)
-  be unmute(c: Consumer)
-
-interface tag SourceListener is (DisposableActor & BoundaryUpdateable)
-  be update_router(router: PartitionRouter)
-  be add_boundary_builders(
-    boundary_builders: Map[String, OutgoingBoundaryBuilder] val)
-  be update_boundary_builders(
-    boundary_builders: Map[String, OutgoingBoundaryBuilder] val)

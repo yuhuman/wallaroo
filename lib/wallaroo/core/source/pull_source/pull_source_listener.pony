@@ -2,7 +2,6 @@
 
 actor PullSourceListener is SourceListener
   let _source_listener: SourceListenerIntegration
-  let _pipeline_name: String
   let _step_id_gen: StepIdGenerator = StepIdGenerator
   let _env: Env
   var _router: Router
@@ -18,7 +17,6 @@ actor PullSourceListener is SourceListener
   let _target_router: Router
 
   new create(env: Env, source_listener: SourceListenerIntegration,
-    pipeline_name: String,
     //!@
     // source_builder: SourceBuilder,
     router: Router,
@@ -36,7 +34,6 @@ actor PullSourceListener is SourceListener
     """
     _env = env
     _source_listener = source_listener
-    _pipeline_name = pipeline_name
     _router = router
     _router_registry = router_registry
     _route_builder = route_builder

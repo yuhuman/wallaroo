@@ -77,7 +77,8 @@ class val TCPSourceConfig[In: Any val]
   fun source_listener_builder_builder(): TCPSourceListenerBuilderBuilder =>
     TCPSourceListenerBuilderBuilder(_host, _service)
 
-  fun source_builder(app_name: String, name: String):
+  fun source_builder(app_name: String, pipeline_name: String):
     TypedTCPSourceBuilderBuilder[In]
   =>
-    TypedTCPSourceBuilderBuilder[In](app_name, name, _handler, _host, _service)
+    TypedTCPSourceBuilderBuilder[In](app_name, pipeline_name, _handler, _host,
+      _service)

@@ -23,16 +23,16 @@ use "wallaroo/core/topology"
 
 class val TypedTCPSourceBuilderBuilder[In: Any val]
   let _app_name: String
-  let _name: String
+  let _pipeline_name: String
   let _handler: FramedSourceHandler[In] val
   let _host: String
   let _service: String
 
-  new val create(app_name: String, name': String,
+  new val create(app_name: String, pipeline_name: String,
     handler: FramedSourceHandler[In] val, host': String, service': String)
   =>
     _app_name = app_name
-    _name = name'
+    _pipeline_name = pipeline_name
     _handler = handler
     _host = host'
     _service = service'
@@ -46,7 +46,7 @@ class val TypedTCPSourceBuilderBuilder[In: Any val]
       SourceBuilder
   =>
     BasicSourceBuilder[In, FramedSourceHandler[In] val](_app_name, worker_name,
-      _name, runner_builder, _handler, router,
+      _pipeline_name, runner_builder, _handler, router,
       metrics_conn, pre_state_target_ids, consume metrics_reporter,
       TCPFramedSourceNotifyBuilder[In])
 
