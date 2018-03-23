@@ -106,7 +106,7 @@ actor TCPSourceListener is SourceListener
         spr.partition_id(), this)
     end
 
-    @printf[I32]((source_builder.name() + " source attempting to listen on "
+    @printf[I32]((source_builder.pipeline_name() + " source attempting to listen on "
       + host + ":" + service + "\n").cstring())
     _notify_listening()
 
@@ -231,10 +231,10 @@ actor TCPSourceListener is SourceListener
     Inform the notifier that we're listening.
     """
     if not _event.is_null() then
-      @printf[I32]((_source_builder.name() + " source is listening\n").cstring())
+      @printf[I32]((_source_builder.pipeline_name() + " source is listening\n").cstring())
     else
       _closed = true
-      @printf[I32]((_source_builder.name() +
+      @printf[I32]((_source_builder.pipeline_name() +
         " source is unable to listen\n").cstring())
       Fail()
     end
@@ -245,7 +245,7 @@ actor TCPSourceListener is SourceListener
         as TCPSourceNotify iso^
     else
       @printf[I32](
-        (_source_builder.name() + " could not create a TCPSourceNotify\n").cstring())
+        (_source_builder.pipeline_name() + " could not create a TCPSourceNotify\n").cstring())
       Fail()
       error
     end

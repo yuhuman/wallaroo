@@ -56,7 +56,7 @@ actor PullSourceListener is SourceListener
     end
 
     //!@
-    // @printf[I32]((source_builder.name() + " source attempting to listen on "
+    // @printf[I32]((source_builder.pipeline_name() + " source attempting to listen on "
     //   + host + ":" + service + "\n").cstring())
     // _notify_listening()
 

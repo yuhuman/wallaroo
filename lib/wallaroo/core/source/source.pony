@@ -26,7 +26,7 @@ use "wallaroo/core/routing"
 use "wallaroo/core/topology"
 
 trait val SourceBuilder
-  fun name(): String
+  fun pipeline_name(): String
   fun apply(event_log: EventLog, auth: AmbientAuth, target_router: Router,
     env: Env): SourceNotify iso^
   fun val update_router(router: Router): SourceBuilder
@@ -79,7 +79,7 @@ class val BasicSourceBuilder[In: Any val, SH: SourceHandler[In] val] is
       _metrics_reporter.clone(), _source_notify_builder)
 
 interface val SourceBuilderBuilder
-  fun name(): String
+  fun pipeline_name(): String
   fun apply(runner_builder: RunnerBuilder, router: Router,
     metrics_conn: MetricsSink,
     pre_state_target_ids: Array[StepId] val = recover Array[StepId] end,

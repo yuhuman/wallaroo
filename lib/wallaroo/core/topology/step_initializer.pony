@@ -106,7 +106,7 @@ class val SourceData
     pre_state_target_ids': Array[StepId] val = recover Array[StepId] end)
   =>
     _id = id'
-    _pipeline_name = b.name()
+    _pipeline_name = b.pipeline_name()
     _name = "| " + _pipeline_name + " source | " + r.name() + "|"
     _builder = b
     _runner_builder = r

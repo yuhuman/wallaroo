@@ -42,7 +42,7 @@ class KafkaSourceListenerNotify[In: Any val]
         KafkaSourceNotify[In] iso^
     else
       @printf[I32](
-        (_source_builder.name()
+        (_source_builder.pipeline_name()
           + " could not create a KafkaSourceNotify\n").cstring())
       Fail()
       error

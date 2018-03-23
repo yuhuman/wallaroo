@@ -28,16 +28,16 @@ class val TypedTCPSourceBuilderBuilder[In: Any val]
   let _host: String
   let _service: String
 
-  new val create(app_name: String, pipeline_name: String,
+  new val create(app_name: String, pipeline_name': String,
     handler: FramedSourceHandler[In] val, host': String, service': String)
   =>
     _app_name = app_name
-    _pipeline_name = pipeline_name
+    _pipeline_name = pipeline_name'
     _handler = handler
     _host = host'
     _service = service'
 
-  fun name(): String => _name
+  fun pipeline_name(): String => _pipeline_name
 
   fun apply(runner_builder: RunnerBuilder, router: Router,
     metrics_conn: MetricsSink,
