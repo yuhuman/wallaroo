@@ -419,7 +419,8 @@ actor Step is (Producer & Consumer)
     if not _is_duplicate(msg_uid, frac_ids) then
       _deduplication_list.push((msg_uid, frac_ids))
 
-      process_message[D](metric_name, pipeline_time_spent, data, i_producer_id,
+      //!@
+      run[D](metric_name, pipeline_time_spent, data, i_producer_id,
         i_producer, msg_uid, frac_ids, i_seq_id, i_route_id,
         latest_ts, metrics_id, worker_ingress_ts)
     else
