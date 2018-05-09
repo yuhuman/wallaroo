@@ -680,7 +680,7 @@ actor ApplicationDistributor is Distributor
                     local_graphs(w)?.add_node(psd, next_id)
                   end
 
-                  for s_id in psd.worker_to_step_id(w)?.values() do
+                  for s_id in psd.worker_to_step_ids(w)?.values() do
                     let next_initializer = StepBuilder(application.name(),
                       w, pipeline.name(), next_runner_builder, s_id)
                     step_map(s_id) = ProxyAddress(w, s_id)

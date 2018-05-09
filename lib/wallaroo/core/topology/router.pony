@@ -1513,20 +1513,30 @@ trait val StatelessPartitionRouter is (Router &
 class val LocalStatelessPartitionRouter is StatelessPartitionRouter
   let _partition_id: U128
   let _worker_name: String
+  let _worker_to_step_ids: Map[String, Array[StepId] val] val
   // Maps stateless partition id to step id
   let _step_ids: Map[U64, StepId] val
+  let _reverse_step_ids: Map[StepId, U64] val
   // Maps stateless partition id to step or proxy router
   let _partition_routes: Map[U64, (Step | ProxyRouter)] val
   let _steps_per_worker: USize
   let _partition_size: USize
 
-  new val create(p_id: U128, worker_name: String, s_ids: Map[U64, StepId] val,
+  new val create(p_id: U128, worker_name: String,
+    worker_to_step_ids: Map[String, Array[StepId] val] val,
+    s_ids: Map[U64, StepId] val,
     partition_routes: Map[U64, (Step | ProxyRouter)] val,
     steps_per_worker: USize)
   =>
     _partition_id = p_id
     _worker_name = worker_name
+    _worker_to_step_ids = worker_to_step_ids
     _step_ids = s_ids
+    let r_step_ids = recover trn Map[StepId, U64] end
+    for (k, v) in _step_ids.pairs() do
+      r_step_ids(v) = k
+    end
+    _reverse_step_ids = consume r_step_ids
     _partition_routes = partition_routes
     _steps_per_worker = steps_per_worker
     _partition_size = _partition_routes.size()
@@ -1630,7 +1640,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
           new_partition_routes(p_id) = t
         end
       end
-      LocalStatelessPartitionRouter(_partition_id, _worker_name, _step_ids,
+      LocalStatelessPartitionRouter(_partition_id, _worker_name,
+        _worker_to_step_ids, _step_ids,
         consume new_partition_routes, _steps_per_worker)
     | let proxy_router: ProxyRouter =>
       for (p_id, t) in _partition_routes.pairs() do
@@ -1640,7 +1651,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
           new_partition_routes(p_id) = t
         end
       end
-      LocalStatelessPartitionRouter(_partition_id, _worker_name, _step_ids,
+      LocalStatelessPartitionRouter(_partition_id, _worker_name,
+        _worker_to_step_ids, _step_ids,
         consume new_partition_routes, _steps_per_worker)
     end
 
@@ -1656,7 +1668,54 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
         new_partition_routes(p_id) = target
       end
     end
-    LocalStatelessPartitionRouter(_partition_id, _worker_name, _step_ids,
+    LocalStatelessPartitionRouter(_partition_id, _worker_name,
+      _worker_to_step_ids, _step_ids,
+      consume new_partition_routes, _steps_per_worker)
+
+  fun add_worker(worker: String, boundary: OutgoingBoundary,
+    step_ids: Array[StepId] val, auth: AmbientAuth): StatelessPartitionRouter
+  =>
+    ifdef debug then
+      Invariant(step_ids.size() == _steps_per_worker)
+    end
+
+    let new_worker_to_step_ids = recover trn Map[String, Array[StepId] val] end
+    for (w, s_ids) in _worker_to_step_ids.pairs() do
+      new_worker_to_step_ids(w) = s_ids
+    end
+    new_worker_to_step_ids(worker) = step_ids
+
+    let new_step_ids = recover trn Map[U64, StepId] end
+    let new_partition_routes: recover trn Map[U64, (Step | ProxyRouter)] end
+
+    var next_p_id: U64 = 0
+    for idx in Range(0, new_worker_to_step_ids.size()) do
+      for (w, s_ids) in new_worker_to_step_ids.pairs() do
+        try
+          let next_step_id = s_ids(idx)?
+          let target =
+            if w != worker then
+              let old_p_id = _reverse_step_ids(next_step_id)?
+              _partition_routes(old_p_id)
+            else
+              let proxy_address = ProxyAddress(worker, next_step_id)
+              ProxyRouter(worker, boundary, proxy_address, auth)
+            end
+          new_step_ids(next_p_id) = next_step_id
+          new_partition_routes(next_p_id) = target
+          next_p_id = next_p_id + 1
+        else
+          Fail()
+        end
+      end
+    end
+    ifdef debug then
+      let p_id_count = new_worker_to_step_ids.size() * _steps_per_worker
+      Invariant(next_p_id == p_id_count)
+    end
+
+    LocalStatelessPartitionRouter(_partition_id, _worker_name,
+      consume new_worker_to_step_ids, consume new_step_ids,
       consume new_partition_routes, _steps_per_worker)
 
   fun calculate_shrink(remaining_workers: Array[String] val):
@@ -1676,6 +1735,13 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     // lose messages. We need to reassign the partition ids from 0 to
     // the new partition count - 1.
     let new_partition_count = remaining_workers.size() * _steps_per_worker
+
+    let new_worker_to_step_ids = recover trn Map[String, Array[StepId] val] end
+    for (w, s_ids) in _worker_to_step_ids.pairs() do
+      if ArrayHelpers[String].contains[String](remaining_workers, w) then
+        new_worker_to_step_ids(w) = s_ids
+      end
+    end
 
     // Filter out non-remaining workers, creating a map of only the
     // remaining partition routes.
@@ -1715,8 +1781,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     end
 
     LocalStatelessPartitionRouter(_partition_id, _worker_name,
-      consume new_step_ids, consume new_partition_routes,
-      _steps_per_worker)
+      consume new_worker_to_step_ids, consume new_step_ids,
+      consume new_partition_routes, _steps_per_worker)
 
   fun blueprint(): StatelessPartitionRouterBlueprint =>
    let partition_addresses = recover trn Map[U64, ProxyAddress] end
@@ -1724,8 +1790,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
       for (k, v) in _partition_routes.pairs() do
         match v
         | let s: Step =>
-          let pr = ProxyAddress(_worker_name, _step_ids(k)?)
-          partition_addresses(k) = pr
+          let pa = ProxyAddress(_worker_name, _step_ids(k)?)
+          partition_addresses(k) = pa
         | let pr: ProxyRouter =>
           partition_addresses(k) = pr.proxy_address()
         end
@@ -1735,7 +1801,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     end
 
     LocalStatelessPartitionRouterBlueprint(_partition_id, _step_ids,
-      consume partition_addresses, _steps_per_worker)
+      _reverse_step_ids, consume partition_addresses, _worker_to_step_ids,
+      _steps_per_worker)
 
   fun distribution_digest(): Map[String, Array[String] val] val =>
     // Return a map of form {worker_name: step_ids_as_strings}
@@ -1814,31 +1881,79 @@ class val LocalStatelessPartitionRouterBlueprint
   is StatelessPartitionRouterBlueprint
   let _partition_id: U128
   let _step_ids: Map[U64, StepId] val
+  let _reverse_step_ids: Map[StepId, U64] val
   let _partition_addresses: Map[U64, ProxyAddress] val
+  let _worker_to_step_ids: Map[String, Array[StepId] val] val
   let _steps_per_worker: USize
 
   new val create(p_id: U128, s_ids: Map[U64, StepId] val,
+    r_s_ids: Map[StepId, U64] val,
     partition_addresses: Map[U64, ProxyAddress] val,
+    worker_to_step_ids: Map[String, Array[StepId] val] val,
     steps_per_worker: USize)
   =>
     _partition_id = p_id
     _step_ids = s_ids
+    _reverse_step_ids = r_s_ids
     _partition_addresses = partition_addresses
+    _worker_to_step_ids = worker_to_step_ids
     _steps_per_worker = steps_per_worker
 
   fun build_router(worker_name: String,
+    step_ids: Array[StepId] val,
+    steps: Map[StepId, Step] val,
     outgoing_boundaries: Map[String, OutgoingBoundary] val,
     auth: AmbientAuth): StatelessPartitionRouter
   =>
-    let partition_routes = recover trn Map[U64, (Step | ProxyRouter)] end
+    ifdef debug then
+      Invariant(steps.size() == _steps_per_worker)
+    end
+
+    let old_partition_routes = recover trn Map[U64, (Step | ProxyRouter)] end
     try
       for (k, pa) in _partition_addresses.pairs() do
         let proxy_router = ProxyRouter(pa.worker,
           outgoing_boundaries(pa.worker)?, pa, auth)
-        partition_routes(k) = proxy_router
+        old_partition_routes(k) = proxy_router
       end
     else
       Fail()
     end
-    LocalStatelessPartitionRouter(_partition_id, worker_name, _step_ids,
-      consume partition_routes, _steps_per_worker)
+
+    let new_worker_to_step_ids = recover trn Map[String, Array[StepId] val] end
+    for (w, s_ids) in _worker_to_step_ids.pairs() do
+      new_worker_to_step_ids(w) = s_ids
+    end
+    new_worker_to_step_ids(worker_name) = step_ids
+
+    let new_step_ids = recover trn Map[U64, StepId] end
+    let new_partition_routes: recover trn Map[U64, (Step | ProxyRouter)] end
+
+    var next_p_id: U64 = 0
+    for idx in Range(0, new_worker_to_step_ids.size()) do
+      for (w, s_ids) in new_worker_to_step_ids.pairs() do
+        try
+          let next_step_id = s_ids(idx)?
+          let target =
+            if w != worker_name then
+              let old_p_id = _reverse_step_ids(next_step_id)?
+              _old_partition_routes(old_p_id)
+            else
+              steps(next_step_id)?
+            end
+          new_step_ids(next_p_id) = next_step_id
+          new_partition_routes(next_p_id) = target
+          next_p_id = next_p_id + 1
+        else
+          Fail()
+        end
+      end
+    end
+    ifdef debug then
+      let p_id_count = new_worker_to_step_ids.size() * _steps_per_worker
+      Invariant(next_p_id == p_id_count)
+    end
+
+    LocalStatelessPartitionRouter(_partition_id, worker_name,
+      consume new_worker_to_step_ids, consume new_step_ids,
+      consume new_partition_routes, _steps_per_worker)

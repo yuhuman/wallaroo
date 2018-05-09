@@ -242,21 +242,21 @@ class val PreStatelessData
   let _pipeline_name: String
   let _id: U128
   let partition_id_to_worker: Map[U64, String] val
-  let partition_id_to_step_id: Map[U64, U128] val
-  let worker_to_step_id: Map[String, Array[U128] val] val
+  let partition_id_to_step_id: Map[U64, StepId] val
+  let worker_to_step_ids: Map[String, Array[StepId] val] val
   let steps_per_worker: USize
 
-  new val create(pipeline_name': String, step_id': U128,
+  new val create(pipeline_name': String, step_id': StepId,
     partition_id_to_worker': Map[U64, String] val,
-    partition_id_to_step_id': Map[U64, U128] val,
-    worker_to_step_id': Map[String, Array[U128] val] val,
+    partition_id_to_step_id': Map[U64, StepId] val,
+    worker_to_step_ids': Map[String, Array[StepId] val] val,
     steps_per_worker': USize)
   =>
     _pipeline_name = pipeline_name'
     _id = step_id'
     partition_id_to_worker = partition_id_to_worker'
     partition_id_to_step_id = partition_id_to_step_id'
-    worker_to_step_id = worker_to_step_id'
+    worker_to_step_ids = worker_to_step_ids'
     steps_per_worker = steps_per_worker'
 
   fun name(): String => "PreStatelessData"

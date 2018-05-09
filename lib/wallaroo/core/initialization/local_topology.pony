@@ -1137,7 +1137,7 @@ actor LocalTopologyInitializer is LayoutInitializer
             //////////////////////
               try
                 let local_step_ids =
-                  pre_stateless_data.worker_to_step_id(_worker_name)?
+                  pre_stateless_data.worker_to_step_ids(_worker_name)?
 
                 // Make sure all local steps for this stateless partition
                 // have already been initialized on this worker.
@@ -1180,6 +1180,7 @@ actor LocalTopologyInitializer is LayoutInitializer
 
                   let stateless_partition_router =
                     LocalStatelessPartitionRouter(next_node.id, _worker_name,
+                      pre_stateless_data.worker_to_step_ids,
                       pre_stateless_data.partition_id_to_step_id,
                       consume partition_routes,
                       pre_stateless_data.steps_per_worker)

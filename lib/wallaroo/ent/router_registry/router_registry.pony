@@ -536,10 +536,18 @@ actor RouterRegistry is InFlightAckRequester
       obs_trn(w) = ob
     end
     let obs = consume val obs_trn
+
     for (id, b) in partition_blueprints.pairs() do
+      //!@ Build stateless steps and update DataRouter
+      let next_step_ids = recover trn Array[StepId] end
+      let next_steps = recover trn Map[StepId, Step] end
+
+
       let next_router = b.build_router(_worker_name, obs, _auth)
       _distribute_stateless_partition_router(next_router)
       _stateless_partition_routers(id) = next_router
+
+      //!@ Inform cluster of new stateless steps
     end
 
   be create_omni_router_from_blueprint(

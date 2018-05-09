@@ -310,7 +310,8 @@ primitive _RecoveryReplayerGenerator
 
 primitive _StatelessPartitionGenerator
   fun apply(): StatelessPartitionRouter =>
-    LocalStatelessPartitionRouter(0, "", recover Map[U64, U128] end,
+    LocalStatelessPartitionRouter(0, "", recover Map[U64, StepId] end,
+      recover Map[String, Array[StepId] val] end,
       recover Map[U64, (Step | ProxyRouter)] end, 1)
 
 actor _Cluster is Cluster
