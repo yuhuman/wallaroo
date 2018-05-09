@@ -18,6 +18,7 @@ Copyright 2017 The Wallaroo Authors.
 
 use "collections"
 use "net"
+use "wallaroo_labs/collection_helpers"
 use "wallaroo_labs/equality"
 use "wallaroo_labs/mort"
 use "wallaroo/core/boundary"
@@ -1686,7 +1687,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     new_worker_to_step_ids(worker) = step_ids
 
     let new_step_ids = recover trn Map[U64, StepId] end
-    let new_partition_routes: recover trn Map[U64, (Step | ProxyRouter)] end
+    let new_partition_routes = recover trn Map[U64, (Step | ProxyRouter)] end
 
     var next_p_id: U64 = 0
     for idx in Range(0, new_worker_to_step_ids.size()) do
@@ -1711,7 +1712,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     end
     ifdef debug then
       let p_id_count = new_worker_to_step_ids.size() * _steps_per_worker
-      Invariant(next_p_id == p_id_count)
+      Invariant(next_p_id.usize() == p_id_count)
     end
 
     LocalStatelessPartitionRouter(_partition_id, _worker_name,
@@ -1874,6 +1875,8 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
 
 trait val StatelessPartitionRouterBlueprint
   fun build_router(worker_name: String,
+    step_ids: Array[StepId] val,
+    steps: Map[StepId, Step] val,
     outgoing_boundaries: Map[String, OutgoingBoundary] val,
     auth: AmbientAuth): StatelessPartitionRouter
 
@@ -1927,7 +1930,7 @@ class val LocalStatelessPartitionRouterBlueprint
     new_worker_to_step_ids(worker_name) = step_ids
 
     let new_step_ids = recover trn Map[U64, StepId] end
-    let new_partition_routes: recover trn Map[U64, (Step | ProxyRouter)] end
+    let new_partition_routes = recover trn Map[U64, (Step | ProxyRouter)] end
 
     var next_p_id: U64 = 0
     for idx in Range(0, new_worker_to_step_ids.size()) do
@@ -1937,7 +1940,7 @@ class val LocalStatelessPartitionRouterBlueprint
           let target =
             if w != worker_name then
               let old_p_id = _reverse_step_ids(next_step_id)?
-              _old_partition_routes(old_p_id)
+              old_partition_routes(old_p_id)
             else
               steps(next_step_id)?
             end
@@ -1951,7 +1954,7 @@ class val LocalStatelessPartitionRouterBlueprint
     end
     ifdef debug then
       let p_id_count = new_worker_to_step_ids.size() * _steps_per_worker
-      Invariant(next_p_id == p_id_count)
+      Invariant(next_p_id.usize() == p_id_count)
     end
 
     LocalStatelessPartitionRouter(_partition_id, worker_name,
