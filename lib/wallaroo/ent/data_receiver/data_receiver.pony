@@ -240,7 +240,7 @@ actor DataReceiver is Producer
     //_router.unregister_producer(this, 0)
 
     _router = router
-    _router.register_producer(this)
+    _router.register_producer(_id, this)
     for id in _router.route_ids().values() do
       _watermarker.add_route(id)
     end
