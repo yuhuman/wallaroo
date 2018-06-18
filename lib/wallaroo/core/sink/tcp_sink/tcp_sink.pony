@@ -298,10 +298,10 @@ actor TCPSink is Consumer
   be request_ack() =>
     _terminus_route.request_ack()
 
-  be register_producer(producer: Producer) =>
+  be register_producer(id: StepId, producer: Producer) =>
     _upstreams.set(producer)
 
-  be unregister_producer(producer: Producer) =>
+  be unregister_producer(id: StepId, producer: Producer) =>
     ifdef debug then
       Invariant(_upstreams.contains(producer))
     end

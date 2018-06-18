@@ -53,9 +53,8 @@ interface tag BoundaryUpdateable
 
 trait tag Consumer is (Runnable & StateReceiver & AckRequester &
   Initializable & InFlightAckResponder & StatusReporter)
-  be register_producer(producer: Producer)
-  be unregister_producer(producer: Producer)
-  be identify_inputs()
+  be register_producer(id: StepId, producer: Producer)
+  be unregister_producer(id: StepId, producer: Producer)
 
 trait tag Runnable
   be run[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,

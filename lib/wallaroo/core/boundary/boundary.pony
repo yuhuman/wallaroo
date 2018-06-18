@@ -435,14 +435,14 @@ actor OutgoingBoundary is Consumer
     // TODO: How do we propagate this down?
     None
 
-  be register_producer(producer: Producer) =>
+  be register_producer(id: StepId, producer: Producer) =>
     ifdef debug then
       Invariant(not _upstreams.contains(producer))
     end
 
     _upstreams.set(producer)
 
-  be unregister_producer(producer: Producer) =>
+  be unregister_producer(id: StepId, producer: Producer) =>
     // TODO: Determine if we need this Invariant.
     // ifdef debug then
     //   Invariant(_upstreams.contains(producer))

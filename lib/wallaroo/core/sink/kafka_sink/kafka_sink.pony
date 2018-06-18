@@ -252,10 +252,10 @@ actor KafkaSink is (Consumer & KafkaClientManager & KafkaProducer)
 
     None
 
-  be register_producer(producer: Producer) =>
+  be register_producer(id: StepId, producer: Producer) =>
     _upstreams.set(producer)
 
-  be unregister_producer(producer: Producer) =>
+  be unregister_producer(id: StepId, producer: Producer) =>
     ifdef debug then
       Invariant(_upstreams.contains(producer))
     end
