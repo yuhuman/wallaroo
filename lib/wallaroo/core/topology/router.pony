@@ -891,12 +891,12 @@ class val DataRouter is Equatable[DataRouter]
 
   fun register_producer(p_id: StepId, producer: Producer) =>
     for step in _data_routes.values() do
-      step.register_producer(p_id, producer)
+      step.register_producer(p_id, producer where back_edge = true)
     end
 
   fun unregister_producer(p_id: StepId, producer: Producer) =>
     for step in _data_routes.values() do
-      step.unregister_producer(p_id, producer)
+      step.unregister_producer(p_id, producer where back_edge = true)
     end
 
   fun request_ack(r_ids: Array[RouteId]) =>

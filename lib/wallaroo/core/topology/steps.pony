@@ -477,16 +477,25 @@ actor Step is (Producer & Consumer)
       None
     end
 
-  be register_producer(id: StepId, producer: Producer) =>
+  be register_producer(id: StepId, producer: Producer,
+    back_edge: Bool = false)
+  =>
     _upstreams.set(producer)
 
-  be unregister_producer(id: StepId, producer: Producer) =>
+    //!@ Add to input channels
+
+  be unregister_producer(id: StepId, producer: Producer,
+    back_edge: Bool = false)
+  =>
     // TODO: Investigate whether we need this Invariant or why it's sometimes
     // violated during shrink.
     // ifdef debug then
     //   Invariant(_upstreams.contains(producer))
     // end
     _upstreams.unset(producer)
+
+    //!@ Remove input channels
+
 
   be report_status(code: ReportStatusCode) =>
     match code
