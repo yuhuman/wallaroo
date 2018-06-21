@@ -34,13 +34,14 @@ use "wallaroo_labs/mort"
 use "wallaroo_labs/query"
 
 
-actor RouterRegistry is InFlightAckRequester
+actor RouterRegistry is (InFlightAckRequester)
   let _id: StepId
   let _auth: AmbientAuth
   let _data_receivers: DataReceivers
   let _worker_name: String
   let _connections: Connections
   let _recovery_file_cleaner: RecoveryFileCleaner
+  let _snapshot_initiator: SnapshotInitiator
   var _data_router: DataRouter =
     DataRouter(recover Map[U128, Consumer] end)
   var _pre_state_data: (Array[PreStateData] val | None) = None
@@ -130,13 +131,15 @@ actor RouterRegistry is InFlightAckRequester
   new create(auth: AmbientAuth, worker_name: String,
     data_receivers: DataReceivers, c: Connections,
     recovery_file_cleaner: RecoveryFileCleaner, stop_the_world_pause: U64,
-    is_joining: Bool, contacted_worker: (String | None) = None)
+    is_joining: Bool, snapshot_initiator: SnapshotInitiator,
+    contacted_worker: (String | None) = None)
   =>
     _auth = auth
     _worker_name = worker_name
     _data_receivers = data_receivers
     _connections = c
     _recovery_file_cleaner = recovery_file_cleaner
+    _snapshot_initiator = snapshot_initiator
     _stop_the_world_pause = stop_the_world_pause
     _connections.register_disposable(this)
     _id = (digestof this).u128()
@@ -200,6 +203,7 @@ actor RouterRegistry is InFlightAckRequester
   be register_source(source: Source, source_id: StepId) =>
     _sources(source_id) = source
     _source_ids(digestof source) = source_id
+    _snapshot_initiator.register_source(source, source_id)
     if not _stop_the_world_in_process and _application_ready_to_work then
       source.unmute(_dummy_consumer)
     end
