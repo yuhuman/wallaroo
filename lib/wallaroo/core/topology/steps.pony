@@ -31,6 +31,7 @@ use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/network"
 use "wallaroo/ent/rebalancing"
 use "wallaroo/ent/recovery"
+use "wallaroo/ent/snapshot"
 use "wallaroo/ent/watermarking"
 use "wallaroo_labs/mort"
 use "wallaroo/core/initialization"
@@ -480,6 +481,8 @@ actor Step is (Producer & Consumer)
   be register_producer(id: StepId, producer: Producer,
     back_edge: Bool = false)
   =>
+    @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+
     _upstreams.set(producer)
 
     //!@ Add to input channels
@@ -487,6 +490,8 @@ actor Step is (Producer & Consumer)
   be unregister_producer(id: StepId, producer: Producer,
     back_edge: Bool = false)
   =>
+    @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+
     // TODO: Investigate whether we need this Invariant or why it's sometimes
     // violated during shrink.
     // ifdef debug then
@@ -632,8 +637,43 @@ actor Step is (Producer & Consumer)
     end
     _in_flight_ack_waiter.migrated()
 
-  // Log-rotation
-  be snapshot_state() =>
+  //////////////
+  // SNAPSHOTS
+  //////////////
+  be receive_snapshot_barrier(sr: SnapshotRequester, snapshot_id: SnapshotId)
+  =>
+    if _step_message_processor.snapshot_in_progress() then
+      _step_message_processor.receive_snapshot_barrier(sr, snapshot_id)
+    else
+      // !@ Handle this more cleanly. We need to make sure we don't lose
+      // queued messages, but should snapshots ever be possible when we're in
+      // the queueing state?
+      match _step_message_processor
+      | let nsmp: NormalStepMessageProcessor =>
+        let outputs = recover iso StepIs[Consumer] end
+        for c in _routes.keys() do
+          outputs.set(c)
+        end
+        _step_message_processor = SnapshotStepMessageProcessor(this,
+          SnapshotBarrierForwarder(this, _upstreams, consume outputs,
+            snapshot_id)
+      else
+        Fail()
+      end
+    end
+
+  be remote_snapshot_state() =>
     ifdef "resilience" then
       StepStateSnapshotter(_runner, _id, _seq_id_generator, _event_log)
     end
+
+  fun ref snapshot_state() =>
+    ifdef "resilience" then
+      StepStateSnapshotter(_runner, _id, _seq_id_generator, _event_log)
+    end
+
+  fun ref snapshot_complete() =>
+    ifdef debug then
+      Invariant(_step_message_processor.snapshot_in_progress())
+    end
+    _step_message_processor = NormalStepMessageProcessor(this)
