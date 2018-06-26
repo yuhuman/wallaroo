@@ -36,7 +36,7 @@ actor DummyProducer is Producer
   fun ref current_sequence_id(): SeqId =>
     0
 
-  be remove_route_to_consumer(c: Consumer) =>
+  be remove_route_to_consumer(id: StepId, c: Consumer) =>
     None
 
   // Muteable

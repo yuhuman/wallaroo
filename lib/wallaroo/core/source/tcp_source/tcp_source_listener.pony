@@ -210,7 +210,7 @@ actor TCPSourceListener is SourceListener
     try
       let source_id = _step_id_gen()
       let source = TCPSource._accept(source_id, this,
-        _notify_connected(source_id)?, _event_log, _router.routes(),
+        _notify_connected(source_id)?, _event_log, _router,
         _route_builder, _outgoing_boundary_builders, _layout_initializer,
         ns, _init_size, _max_size, _metrics_reporter.clone(), _router_registry)
 
