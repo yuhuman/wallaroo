@@ -76,7 +76,7 @@ class TCPFramedSourceNotify[In: Any val] is TCPSourceNotify
     _metrics_reporter = consume metrics_reporter
     _header_size = _handler.header_length()
 
-  fun routes(): Array[Consumer] val =>
+  fun routes(): Map[StepId, Consumer] val =>
     _router.routes()
 
   fun ref received(source: TCPSource ref, data: Array[U8] iso): Bool =>

@@ -1423,31 +1423,31 @@ actor RouterRegistry is (InFlightAckRequester)
   // Step moved off this worker or new step added to another worker
   /////
   fun ref move_stateful_step_to_proxy[K: (Hashable val & Equatable[K] val)](
-    id: U128, step: Step, proxy_address: ProxyAddress, key: K,
+    id: StepId, step: Step, proxy_address: ProxyAddress, key: K,
     state_name: String)
   =>
     """
     Called when a stateful step has been migrated off this worker to another
     worker
     """
-    _remove_all_routes_to_step(step)
+    _remove_all_routes_to_step(id, step)
     _add_state_proxy_to_partition_router[K](proxy_address, key, state_name)
     _move_step_to_proxy(id, proxy_address)
 
-  fun ref _remove_all_routes_to_step(step: Step) =>
+  fun ref _remove_all_routes_to_step(id: StepId, step: Step) =>
     for source in _sources.values() do
-      source.remove_route_to_consumer(step)
+      source.remove_route_to_consumer(id, step)
     end
-    _data_router.remove_routes_to_consumer(step)
+    _data_router.remove_routes_to_consumer(id, step)
 
-  fun ref _move_step_to_proxy(id: U128, proxy_address: ProxyAddress) =>
+  fun ref _move_step_to_proxy(id: StepId, proxy_address: ProxyAddress) =>
     """
     Called when a step has been migrated off this worker to another worker
     """
     _remove_step_from_data_router(id)
     _add_proxy_to_omni_router(id, proxy_address)
 
-  be add_state_proxy[K: (Hashable val & Equatable[K] val)](id: U128,
+  be add_state_proxy[K: (Hashable val & Equatable[K] val)](id: StepId,
     proxy_address: ProxyAddress, key: K, state_name: String)
   =>
     """

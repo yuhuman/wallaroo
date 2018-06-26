@@ -245,7 +245,7 @@ actor DataReceiver is Producer
       _watermarker.add_route(id)
     end
 
-  be remove_route_to_consumer(c: Consumer) =>
+  be remove_route_to_consumer(id: StepId, c: Consumer) =>
     // DataReceiver doesn't have its own routes
     None
 
