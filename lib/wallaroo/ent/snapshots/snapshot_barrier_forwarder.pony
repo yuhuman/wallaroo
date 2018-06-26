@@ -15,39 +15,44 @@ use "wallaroo_labs/mort"
 
 
 class SnapshotBarrierForwarder
+  let _step_id: StepId
   let _snapshot_requester: SnapshotRequester ref
   let _snapshot_id: SnapshotId
-  let _normal_inputs: SetIs[SnapshotRequester] box
-  let _outputs: SetIs[Snapshottable] box
-  let _has_started_snapshot: SetIs[SnapshotRequester]
+  let _inputs: Map[StepId, SnapshotRequester] box
+  let _outputs: Map[StepId, Snapshottable] box
+  let _has_started_snapshot: Map[StepId, SnapshotRequester] =
+    _has_started_snapshot.create()
 
   // !@ Right now it's possible that inputs or outputs could change out
   // from under us.  Should we stick them in a new val collections?  But then
   // those changes could still happen even if not reflected here.  Perhaps
   // better to add invariant wherever inputs and outputs can be updated in
   // the encapsulating actor to check if snapshot is in progress.
-  new create(sr: SnapshotRequester ref, inputs: SetIs[SnapshotRequester] box,
-    outputs: SetIs[Snapshottable] box, s_id: SnapshotId)
+  new create(step_id: StepId, sr: SnapshotRequester ref,
+    inputs: Map[StepId, SnapshotRequester] box,
+    outputs: Map[StepId, Snapshottable] box, s_id: SnapshotId)
   =>
+    _step_id = step_id
     _snapshot_requester = sr
     _inputs = inputs
     _outputs = outputs
     _snapshot_id = s_id
 
-  fun input_blocking(sr: SnapshotRequester) =>
-    _has_started_snapshot.contains(sr)
+  fun input_blocking(id: StepId, sr: SnapshotRequester) =>
+    _has_started_snapshot.contains(id)
 
-  fun ref receive_snapshot_barrier(sr: SnapshotRequester,
+  fun ref receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
   =>
     if snapshot_id != _snapshot_id then Fail() end
 
-    if _inputs.contains(sr) then
-      _has_started_snapshot.set(sr)
+    if _inputs.contains(step_id) then
+      _has_started_snapshot(step_id) = sr
       if _inputs.size() == _has_started_snapshot.size() then
         _snapshot_requester.snapshot_state()
         for o in _outputs.values() do
-          o.receive_snapshot_barrier(sr, _snapshot_id)
+          o.receive_snapshot_barrier(_step_id, _snapshot_requester,
+            _snapshot_id)
         end
         _snapshot_requester.snapshot_complete()
       end

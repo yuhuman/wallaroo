@@ -688,22 +688,20 @@ actor Step is (Producer & Consumer)
   //////////////
   // SNAPSHOTS
   //////////////
-  be receive_snapshot_barrier(sr: SnapshotRequester, snapshot_id: SnapshotId)
+  be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
+    snapshot_id: SnapshotId)
   =>
     if _step_message_processor.snapshot_in_progress() then
-      _step_message_processor.receive_snapshot_barrier(sr, snapshot_id)
+      _step_message_processor.receive_snapshot_barrier(step_id, sr,
+        snapshot_id)
     else
       // !@ Handle this more cleanly. We need to make sure we don't lose
       // queued messages, but should snapshots ever be possible when we're in
       // the queueing state?
       match _step_message_processor
       | let nsmp: NormalStepMessageProcessor =>
-        let outputs = recover iso StepIs[Consumer] end
-        for c in _routes.keys() do
-          outputs.set(c)
-        end
         _step_message_processor = SnapshotStepMessageProcessor(this,
-          SnapshotBarrierForwarder(this, _upstreams, consume outputs,
+          SnapshotBarrierForwarder(_id, this, _inputs, _outputs,
             snapshot_id)
       else
         Fail()

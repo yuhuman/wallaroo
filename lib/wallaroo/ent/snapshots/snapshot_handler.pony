@@ -12,7 +12,7 @@ the License. You may obtain a copy of the License at
 
 trait SnapshotHandler
   fun in_progress(): Bool
-  fun ref ack_snapshot(s: Snapshottable, snapshot_id: SnapshotId) =>
+  fun ref ack_snapshot(s: Sink, snapshot_id: SnapshotId) =>
     Fail()
   fun ref worker_ack_snapshot(w: String, snapshot_id: SnapshotId) =>
     Fail()

@@ -65,7 +65,8 @@ trait tag Consumer is (Runnable & StateReceiver & AckRequester &
   be unregister_producer(id: StepId, producer: Producer, back_edge: Bool)
 
 trait Snapshottable
-  be receive_snapshot_barrier(sr: SnapshotRequester, snapshot_id: SnapshotId)
+  be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
+    snapshot_id: SnapshotId)
 
 trait tag Runnable
   be run[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,

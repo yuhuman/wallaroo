@@ -495,7 +495,8 @@ actor TCPSource is (Producer & InFlightAckResponder & StatusReporter)
   //////////////
   // SNAPSHOTS
   //////////////
-  be receive_snapshot_barrier(sr: SnapshotRequester, snapshot_id: SnapshotId)
+  be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
+    snapshot_id: SnapshotId)
   =>
 
 

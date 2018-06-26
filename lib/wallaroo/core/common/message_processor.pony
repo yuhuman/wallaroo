@@ -29,7 +29,7 @@ trait StepMessageProcessor
   fun snapshot_in_progress(): Bool =>
     false
 
-  fun ref receive_snapshot_barrier(sr: SnapshotRequester,
+  fun ref receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
   =>
     Fail()
@@ -113,7 +113,7 @@ class SnapshotStepMessageProcessor is StepMessageProcessor
     frac_ids: FractionalMessageId, i_seq_id: SeqId, i_route_id: RouteId,
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64)
   =>
-    if _snapshot_forwarder.input_blocking(i_producer) then
+    if _snapshot_forwarder.input_blocking(i_producer_id, i_producer) then
       let msg = TypedQueuedStepMessage[D](metric_name, pipeline_time_spent,
         data, i_producer_id, msg_uid, frac_ids, i_seq_id, i_route_id,
         latest_ts, metrics_id, worker_ingress_ts)
@@ -127,10 +127,10 @@ class SnapshotStepMessageProcessor is StepMessageProcessor
   fun snapshot_in_progress(): Bool =>
     true
 
-  fun ref receive_snapshot_barrier(sr: SnapshotRequester,
+  fun ref receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
   =>
-    _snapshot_forwarder.receive_snapshot_barrier(sr, snapshot_id)
+    _snapshot_forwarder.receive_snapshot_barrier(step_id, sr, snapshot_id)
 
   fun ref flush(omni_router: OmniRouter) =>
     for msg in messages.values() do

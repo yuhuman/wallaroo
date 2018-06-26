@@ -64,12 +64,16 @@ actor SnapshotInitiator is SnapshotRequester
     None
 
   be ack_snapshot(s: Snapshottable, snapshot_id: SnapshotId) =>
+    """
+    Called by sinks when they have received snapshot barriers on all
+    their inputs.
+    """
     _snapshot_handler.ack_snapshot(s, snapshot_id)
 
   be worker_ack_snapshot(w: String, snapshot_id: SnapshotId) =>
     _snapshot_handler.worker_ack_snapshot(w, snapshot_id)
 
-  be all_sources_acked() =>
+  be all_sinks_acked() =>
     //!@ Send out ack requests to cluster
 
     _snapshot_handler = WorkerAcksSnapshotHandler(this, _workers)

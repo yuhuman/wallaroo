@@ -101,6 +101,8 @@ interface tag Source is (DisposableActor & BoundaryUpdateable &
   be reconnect_boundary(target_worker_name: String)
   be mute(c: Consumer)
   be unmute(c: Consumer)
+  be receive_snapshot_barrier(sr: SnapshotRequester,
+    snapshot_id: SnapshotId)
 
 interface tag SourceListener is (DisposableActor & BoundaryUpdateable)
   be update_router(router: PartitionRouter)
