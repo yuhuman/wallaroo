@@ -30,6 +30,7 @@ use "wallaroo/ent/cluster_manager"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
+use "wallaroo/ent/snapshot"
 use "wallaroo/core/data_channel"
 use "wallaroo/core/invariant"
 use "wallaroo/core/messages"
@@ -284,6 +285,7 @@ actor LocalTopologyInitializer is LayoutInitializer
     _cluster_manager = cluster_manager
     _is_joining = is_joining
     _router_registry.register_local_topology_initializer(this)
+    _initializables.set(_snapshot_initiator)
 
   be update_topology(t: LocalTopology) =>
     _topology = t
@@ -922,7 +924,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                 _initializables.set(next_step)
 
                 built_stateless_steps(next_id) = next_step
-                let next_router = DirectRouter(next_step)
+                let next_router = DirectRouter(next_id, next_step)
                 built_routers(next_id) = next_router
               elseif not builder.is_stateful() then
               //////////////////////////////////
@@ -979,7 +981,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                 _initializables.set(next_step)
 
                 built_stateless_steps(next_id) = next_step
-                let next_router = DirectRouter(next_step)
+                let next_router = DirectRouter(next_id, next_step)
                 built_routers(next_id) = next_router
               else
               ////////////////////////////////
@@ -1013,7 +1015,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                 data_routes(next_id) = state_step
                 _initializables.set(state_step)
 
-                let state_step_router = DirectRouter(state_step)
+                let state_step_router = DirectRouter(next_id, state_step)
                 built_routers(next_id) = state_step_router
 
                 // Before a non-partitioned state builder, we should
@@ -1057,7 +1059,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                     _initializables.set(pre_state_step)
 
                     built_stateless_steps(b.id()) = pre_state_step
-                    let pre_state_router = DirectRouter(pre_state_step)
+                    let pre_state_router = DirectRouter(b.id(), pre_state_step)
                     built_routers(b.id()) = pre_state_router
 
                     state_step.register_routes(state_comp_target,
@@ -1126,7 +1128,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                     end
                   else
                     built_stateless_steps(next_id) = sink
-                    DirectRouter(sink)
+                    DirectRouter(next_id, sink)
                   end
 
                 // Don't add to data_routes unless it's a local sink
@@ -1514,7 +1516,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                 else
                   local_sinks(next_id) = sink
                   built_stateless_steps(next_id) = sink
-                  DirectRouter(sink)
+                  DirectRouter(next_id, sink)
                 end
 
               // Don't add to data routes unless it's a local sink

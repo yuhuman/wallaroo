@@ -33,6 +33,7 @@ use "wallaroo/ent/cluster_manager"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
+use "wallaroo/ent/snapshot"
 use "wallaroo/ent/spike"
 use "wallaroo/core/initialization"
 use "wallaroo/core/messages"
@@ -311,7 +312,9 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
-      let snapshot_initiator = SnapshotInitiator(connections)
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots,
+        _startup_options.snapshots_enabled)
 
       _setup_shutdown_handler(connections, this, auth)
 
@@ -321,7 +324,7 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause,
-        _is_joining)
+        _is_joining, snapshot_initiator)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 
@@ -337,8 +340,8 @@ actor Startup
           _application, _startup_options.worker_name,
           _env, auth, connections, router_registry, metrics_conn,
           _startup_options.is_initializer, data_receivers, event_log, recovery,
-          recovery_replayer, _local_topology_file, _data_channel_file,
-          _worker_names_file)
+          recovery_replayer, snapshot_initiator, _local_topology_file,
+          _data_channel_file, _worker_names_file)
 
       if (_external_host != "") or (_external_service != "") then
         let external_channel_notifier =
@@ -474,6 +477,10 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots,
+        _startup_options.snapshots_enabled)
+
       _setup_shutdown_handler(connections, this, auth)
 
       let data_receivers = DataReceivers(auth, connections,
@@ -482,7 +489,7 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause, _is_joining,
-        m.sender_name)
+        snapshot_initiator, m.sender_name)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 
@@ -498,7 +505,7 @@ actor Startup
           _application, _startup_options.worker_name,
           _env, auth, connections, router_registry, metrics_conn,
           _startup_options.is_initializer, data_receivers,
-          event_log, recovery, recovery_replayer,
+          event_log, recovery, recovery_replayer, snapshot_initiator,
           _local_topology_file, _data_channel_file, _worker_names_file
           where is_joining = true)
 

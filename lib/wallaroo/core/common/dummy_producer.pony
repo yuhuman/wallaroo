@@ -22,6 +22,7 @@ use "wallaroo/core/initialization"
 use "wallaroo/core/routing"
 use "wallaroo/core/topology"
 use "wallaroo/ent/data_receiver"
+use "wallaroo/ent/snapshot"
 use "wallaroo/ent/watermarking"
 
 
@@ -84,3 +85,8 @@ actor DummyProducer is Producer
   be application_ready_to_work(initializer: LocalTopologyInitializer) =>
     None
 
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
+    None
+
+  fun ref snapshot_complete() =>
+    None
