@@ -11,6 +11,7 @@ the License. You may obtain a copy of the License at
 */
 
 use "collections"
+use "wallaroo/core/boundary"
 use "wallaroo/core/common"
 use "wallaroo_labs/mort"
 
@@ -50,10 +51,15 @@ class SnapshotBarrierForwarder
     if _inputs.contains(step_id) then
       _has_started_snapshot(step_id) = sr
       if _inputs.size() == _has_started_snapshot.size() then
-        _snapshot_requester.snapshot_state()
-        for o in _outputs.values() do
-          o.receive_snapshot_barrier(_step_id, _snapshot_requester,
-            _snapshot_id)
+        _snapshot_requester.snapshot_state(_snapshot_id)
+        for (o_id, o) in _outputs.pairs() do
+          match o
+          | let ob: OutgoingBoundary =>
+            ob.forward_snapshot_barrier(o_id, _step_id, _snapshot_id)
+          else
+            o.receive_snapshot_barrier(_step_id, _snapshot_requester,
+              _snapshot_id)
+          end
         end
         _snapshot_requester.snapshot_complete()
       end

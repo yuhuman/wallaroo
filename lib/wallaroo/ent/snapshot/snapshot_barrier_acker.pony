@@ -51,7 +51,7 @@ class SnapshotBarrierAcker
     if _inputs.contains(step_id) then
       _has_started_snapshot(step_id) = sr
       if _inputs.size() == _has_started_snapshot.size() then
-        _sink.snapshot_state()
+        _sink.snapshot_state(_snapshot_id)
         _snapshot_initiator.ack_snapshot(_sink, _snapshot_id)
         _sink.snapshot_complete()
       end

@@ -495,12 +495,17 @@ actor TCPSource is (Producer & InFlightAckResponder & StatusReporter)
   //////////////
   // SNAPSHOTS
   //////////////
-  be initiate_snapshot_barrier(sr: SnapshotRequester,
-    snapshot_id: SnapshotId)
-  =>
-    //!@
-    // Initiate barrier
-    None
+  be initiate_snapshot_barrier(snapshot_id: SnapshotId) =>
+    // TODO: Eventually we might need to snapshot information about the
+    // source here before sending down the barrier.
+    for (o_id, o) in _outputs.pairs() do
+      match o
+      | let ob: OutgoingBoundary =>
+        ob.forward_snapshot_barrier(o_id, _source_id, snapshot_id)
+      else
+        o.receive_snapshot_barrier(_source_id, this, snapshot_id)
+      end
+    end
 
   be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
@@ -508,7 +513,7 @@ actor TCPSource is (Producer & InFlightAckResponder & StatusReporter)
     // Sources have no inputs on which to receive barriers
     Fail()
 
-  fun ref snapshot_state() =>
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
     // !@
     None
 

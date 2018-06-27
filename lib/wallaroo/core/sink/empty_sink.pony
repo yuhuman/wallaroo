@@ -26,7 +26,7 @@ use "wallaroo/core/routing"
 use "wallaroo/core/topology"
 use "wallaroo_labs/mort"
 
-actor EmptySink is Consumer
+actor EmptySink is Sink
   be run[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
     i_producer_id: StepId, i_producer: Producer, msg_uid: MsgId,
     frac_ids: FractionalMessageId, i_seq_id: SeqId, i_route_id: RouteId,
@@ -97,6 +97,12 @@ actor EmptySink is Consumer
   be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
   =>
+    None
+
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
+    None
+
+  fun ref snapshot_complete() =>
     None
 
   be dispose() =>

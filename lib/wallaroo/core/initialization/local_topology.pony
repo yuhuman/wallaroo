@@ -285,6 +285,7 @@ actor LocalTopologyInitializer is LayoutInitializer
     _cluster_manager = cluster_manager
     _is_joining = is_joining
     _router_registry.register_local_topology_initializer(this)
+    _initializables.set(_snapshot_initiator)
 
   be update_topology(t: LocalTopology) =>
     _topology = t

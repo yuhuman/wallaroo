@@ -918,15 +918,33 @@ class val DataRouter is Equatable[DataRouter]
       true
     end
 
-  fun register_producer(p_id: StepId, producer: Producer) =>
-    for step in _data_routes.values() do
-      step.register_producer(p_id, producer)
+  fun register_producer(input_id: StepId, output_id: StepId,
+    producer: Producer)
+  =>
+    try
+      _data_routes(output_id)?.register_producer(input_id, producer)
+    else
+      Fail()
     end
 
-  fun unregister_producer(p_id: StepId, producer: Producer) =>
-    for step in _data_routes.values() do
-      step.unregister_producer(p_id, producer)
+  fun unregister_producer(input_id: StepId, output_id: StepId,
+    producer: Producer)
+  =>
+    try
+      _data_routes(output_id)?.unregister_producer(input_id, producer)
+    else
+      Fail()
     end
+
+  // fun register_producer(producer: Producer) =>
+  //   for (s_id, step) in _data_routes.pairs() do
+  //     step.register_producer(s_id, producer)
+  //   end
+
+  // fun unregister_producer(producer: Producer) =>
+  //   for (s_id, step) in _data_routes.pairs() do
+  //     step.unregister_producer(s_id, producer)
+  //   end
 
   fun request_ack(r_ids: Array[RouteId]) =>
     try

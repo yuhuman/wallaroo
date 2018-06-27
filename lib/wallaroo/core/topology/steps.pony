@@ -534,14 +534,14 @@ actor Step is (Producer & Consumer)
       else
         Fail()
       end
-    end
 
-    var have_input = false
-    for i in _inputs.values() do
-      if i is producer then have_input = true end
-    end
-    if not have_input then
-      _upstreams.unset(producer)
+      var have_input = false
+      for i in _inputs.values() do
+        if i is producer then have_input = true end
+      end
+      if not have_input then
+        _upstreams.unset(producer)
+      end
     end
 
   be report_status(code: ReportStatusCode) =>
@@ -715,7 +715,7 @@ actor Step is (Producer & Consumer)
       StepStateSnapshotter(_runner, _id, _seq_id_generator, _event_log)
     end
 
-  fun ref snapshot_state() =>
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
     ifdef "resilience" then
       StepStateSnapshotter(_runner, _id, _seq_id_generator, _event_log)
     end

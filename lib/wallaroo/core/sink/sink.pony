@@ -23,8 +23,7 @@ use "wallaroo/core/topology"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/snapshot"
 
-trait tag Sink is (Consumer & DisposableActor & SnapshotRequester &
-  Snapshottable)
+trait tag Sink is (Consumer & DisposableActor & SnapshotRequester)
 
 interface val SinkConfig[Out: Any val]
   fun apply(): SinkBuilder

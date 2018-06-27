@@ -22,6 +22,7 @@ use "pony-kafka"
 use "wallaroo_labs/guid"
 use "wallaroo/core/boundary"
 use "wallaroo/core/common"
+use "wallaroo/core/invariant"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
 use "wallaroo/ent/snapshot"
@@ -184,15 +185,13 @@ actor KafkaSource[In: Any val] is (Producer & InFlightAckResponder &
     for (old_id, outdated_consumer) in
       old_router.routes_not_in(_router).pairs()
     do
-      try
-        if _outputs.contains(old_id) then
-          try
-            _outputs.remove(old_id)?
-            _remove_route_if_no_output(outdated_consumer)
-          end
+      if _outputs.contains(old_id) then
+        try
+          _outputs.remove(old_id)?
+          _remove_route_if_no_output(outdated_consumer)
+        else
+          Fail()
         end
-      else
-        Fail()
       end
     end
     for (c_id, consumer) in _router.routes().pairs() do
@@ -365,12 +364,17 @@ actor KafkaSource[In: Any val] is (Producer & InFlightAckResponder &
   //////////////
   // SNAPSHOTS
   //////////////
-  be initiate_snapshot_barrier(sr: SnapshotRequester,
-    snapshot_id: SnapshotId)
-  =>
-    //!@
-    // Initiate barrier
-    None
+  be initiate_snapshot_barrier(snapshot_id: SnapshotId) =>
+    // TODO: Eventually we might need to snapshot information about the
+    // source here before sending down the barrier.
+    for (o_id, o) in _outputs.pairs() do
+      match o
+      | let ob: OutgoingBoundary =>
+        ob.forward_snapshot_barrier(o_id, _source_id, snapshot_id)
+      else
+        o.receive_snapshot_barrier(_source_id, this, snapshot_id)
+      end
+    end
 
   be receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
     snapshot_id: SnapshotId)
@@ -387,7 +391,7 @@ actor KafkaSource[In: Any val] is (Producer & InFlightAckResponder &
     _event_log.snapshot_state(_source_id, 0, 0, _last_flushed_seq_id,
       consume payload)
 
-  fun ref snapshot_state() =>
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
     // !@
     None
 

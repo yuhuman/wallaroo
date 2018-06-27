@@ -11,5 +11,5 @@ the License. You may obtain a copy of the License at
 */
 
 trait tag SnapshotRequester
-  fun ref snapshot_state()
+  fun ref snapshot_state(snapshot_id: SnapshotId)
   fun ref snapshot_complete()

@@ -313,7 +313,9 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
-      let snapshot_initiator = SnapshotInitiator(connections)
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots,
+        _startup_options.snapshots_enabled)
 
       _setup_shutdown_handler(connections, this, auth)
 
@@ -476,7 +478,9 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
-      let snapshot_initiator = SnapshotInitiator(connections)
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots,
+        _startup_options.snapshots_enabled)
 
       _setup_shutdown_handler(connections, this, auth)
 

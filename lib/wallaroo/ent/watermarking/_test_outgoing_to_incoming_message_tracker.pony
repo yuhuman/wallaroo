@@ -14,6 +14,7 @@ use "ponytest"
 use "wallaroo/core/common"
 use "wallaroo/core/topology"
 use "wallaroo/core/routing"
+use "wallaroo/ent/snapshot"
 
 actor _TestOutgoingToIncomingMessageTracker is TestList
   new make() =>
@@ -427,7 +428,7 @@ actor _TestProducer is Producer
   be try_finish_in_flight_request_early(requester_id: StepId) =>
     None
 
-  fun ref snapshot_state() =>
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
     None
 
   fun ref snapshot_complete() =>

@@ -296,7 +296,7 @@ primitive _RouterRegistryGenerator
 
 primitive _SnapshotInitiatorGenerator
   fun apply(env: Env, auth: AmbientAuth): SnapshotInitiator =>
-    SnapshotInitiator(_ConnectionsGenerator(env, auth))
+    SnapshotInitiator(_ConnectionsGenerator(env, auth), 1, false)
 
 primitive _DataReceiversGenerator
   fun apply(env: Env, auth: AmbientAuth): DataReceivers =>

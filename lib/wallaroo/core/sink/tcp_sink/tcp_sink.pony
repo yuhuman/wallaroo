@@ -342,19 +342,19 @@ actor TCPSink is Sink
       else
         Fail()
       end
-    end
 
-    var have_input = false
-    for i in _inputs.values() do
-      if i is producer then have_input = true end
-    end
-    if not have_input then
-      _upstreams.unset(producer)
-    end
+      var have_input = false
+      for i in _inputs.values() do
+        if i is producer then have_input = true end
+      end
+      if not have_input then
+        _upstreams.unset(producer)
+      end
 
-    // If we have no inputs, then we are not involved in snapshotting.
-    if _inputs.size() == 0 then
-      _snapshot_initiator.unregister_sink(this)
+      // If we have no inputs, then we are not involved in snapshotting.
+      if _inputs.size() == 0 then
+        _snapshot_initiator.unregister_sink(this)
+      end
     end
 
   be report_status(code: ReportStatusCode) =>
@@ -402,7 +402,7 @@ actor TCPSink is Sink
     // Nothing to snapshot at this point
     None
 
-  fun ref snapshot_state() =>
+  fun ref snapshot_state(snapshot_id: SnapshotId) =>
     // Nothing to snapshot at this point
     None
 
