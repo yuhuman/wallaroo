@@ -17,6 +17,7 @@ use "wallaroo/core/common"
 use "wallaroo/core/data_channel"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
+use "wallaroo/ent/snapshot"
 use "wallaroo/ent/watermarking"
 use "wallaroo_labs/mort"
 use "wallaroo/core/invariant"
@@ -207,8 +208,26 @@ actor DataReceiver is Producer
       Fail()
     end
 
-  //////////////
+  ///////////////
+  // SNAPSHOTS
+  ///////////////
+  be forward_snapshot_barrier(target_step_id: StepId,
+    origin_step_id: StepId, sr: SnapshotRequester, snapshot_id: SnapshotId)
+  =>
+    _router.forward_snapshot_barrier(target_step_id, origin_step_id, sr,
+      snapshot_id)
+
+  fun ref snapshot_state() =>
+    // Nothing to do at this point.
+    None
+
+  fun ref snapshot_complete() =>
+    // Nothing to do at this point.
+    None
+
+  ///////////////////////
   // ORIGIN (resilience)
+  ///////////////////////
   fun ref _acker(): Acker =>
     // TODO: I dont think we need this.
     // Need to discuss with John

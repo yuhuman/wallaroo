@@ -11,6 +11,8 @@ the License. You may obtain a copy of the License at
 */
 
 use "collections"
+use "wallaroo/core/common"
+use "wallaroo/core/sink"
 use "wallaroo_labs/mort"
 
 
@@ -38,7 +40,7 @@ class SnapshotBarrierAcker
     _snapshot_initiator = snapshot_initiator
     _snapshot_id = s_id
 
-  fun input_blocking(id: StepId, sr: SnapshotRequester) =>
+  fun input_blocking(id: StepId, sr: SnapshotRequester): Bool =>
     _has_started_snapshot.contains(id)
 
   fun ref receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
@@ -49,9 +51,9 @@ class SnapshotBarrierAcker
     if _inputs.contains(step_id) then
       _has_started_snapshot(step_id) = sr
       if _inputs.size() == _has_started_snapshot.size() then
-        // _sink.snapshot_state()
-        _snapshot_initiator.ack_snapshot(this, _snapshot_id)
-        // _sink.snapshot_complete()
+        _sink.snapshot_state()
+        _snapshot_initiator.ack_snapshot(_sink, _snapshot_id)
+        _sink.snapshot_complete()
       end
     else
       Fail()

@@ -112,8 +112,8 @@ actor Step is (Producer & Consumer)
     let initial_router = _runner.clone_router_and_set_input_type(router)
     _update_router(initial_router)
 
-    for (id, consumer) in _router.routes().pairs() do
-      _outputs(id) = consumer
+    for (c_id, consumer) in _router.routes().pairs() do
+      _outputs(c_id) = consumer
       if not _routes.contains(consumer) then
         _routes(consumer) =
           _route_builder(_id, this, consumer, _metrics_reporter)
@@ -145,8 +145,8 @@ actor Step is (Producer & Consumer)
   be application_created(initializer: LocalTopologyInitializer,
     omni_router: OmniRouter)
   =>
-    for (id, consumer) in _router.routes().pairs() do
-      _outputs(id) = consumer
+    for (c_id, consumer) in _router.routes().pairs() do
+      _outputs(c_id) = consumer
       if not _routes.contains(consumer) then
         _routes(consumer) =
           _route_builder(_id, this, consumer, _metrics_reporter)
@@ -236,15 +236,13 @@ actor Step is (Producer & Consumer)
     for (old_id, outdated_consumer) in
       old_router.routes_not_in(_router).pairs()
     do
-      try
-        if _outputs.contains(old_id) then
-          try
-            _outputs.remove(old_id)?
-            _remove_route_if_no_output(outdated_consumer)
-          end
+      if _outputs.contains(old_id) then
+        try
+          _outputs.remove(old_id)?
+          _remove_route_if_no_output(outdated_consumer)
+        else
+          Fail()
         end
-      else
-        Fail()
       end
     end
     for (c_id, consumer) in _router.routes().pairs() do
@@ -515,17 +513,13 @@ actor Step is (Producer & Consumer)
       None
     end
 
-  be register_producer(id: StepId, producer: Producer,
-    back_edge: Bool = false)
-  =>
+  be register_producer(id: StepId, producer: Producer) =>
     @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     _inputs(id) = producer
     _upstreams.set(producer)
 
-  be unregister_producer(id: StepId, producer: Producer,
-    back_edge: Bool = false)
-  =>
+  be unregister_producer(id: StepId, producer: Producer) =>
     @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     // TODO: Investigate whether we need this Invariant or why it's sometimes
@@ -700,9 +694,17 @@ actor Step is (Producer & Consumer)
       // the queueing state?
       match _step_message_processor
       | let nsmp: NormalStepMessageProcessor =>
+        let sr_inputs = recover iso Map[StepId, SnapshotRequester] end
+        for (sr_id, i) in _inputs.pairs() do
+          sr_inputs(sr_id) = i
+        end
+        let s_outputs = recover iso Map[StepId, Snapshottable] end
+        for (s_id, i) in _outputs.pairs() do
+          s_outputs(s_id) = i
+        end
         _step_message_processor = SnapshotStepMessageProcessor(this,
-          SnapshotBarrierForwarder(_id, this, _inputs, _outputs,
-            snapshot_id)
+          SnapshotBarrierForwarder(_id, this, consume sr_inputs,
+            consume s_outputs, snapshot_id))
       else
         Fail()
       end

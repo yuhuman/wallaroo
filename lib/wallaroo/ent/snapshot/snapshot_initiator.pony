@@ -11,6 +11,10 @@ the License. You may obtain a copy of the License at
 */
 
 use "collections"
+use "wallaroo/core/common"
+use "wallaroo/core/sink"
+use "wallaroo/core/source"
+use "wallaroo/ent/network"
 use "wallaroo_labs/mort"
 
 
@@ -54,7 +58,7 @@ actor SnapshotInitiator is SnapshotRequester
     _snapshot_handler = InProgressSnapshotHandler(this, _current_snapshot_id,
       _sinks)
     for s in _sources.values() do
-      s.receive_snapshot_barrier(this, _current_snapshot_id)
+      s.initiate_snapshot_barrier(this, _current_snapshot_id)
     end
 
   fun ref snapshot_state() =>
@@ -73,12 +77,12 @@ actor SnapshotInitiator is SnapshotRequester
   be worker_ack_snapshot(w: String, snapshot_id: SnapshotId) =>
     _snapshot_handler.worker_ack_snapshot(w, snapshot_id)
 
-  be all_sinks_acked() =>
+  be all_sinks_acked(snapshot_id: SnapshotId) =>
     //!@ Send out ack requests to cluster
 
-    _snapshot_handler = WorkerAcksSnapshotHandler(this, _workers)
+    _snapshot_handler = WorkerAcksSnapshotHandler(this, snapshot_id, _workers)
 
-  be all_workers_acked() =>
+  be all_workers_acked(snapshot_id: SnapshotId) =>
     //!@ Write out snapshot id to disk
 
     //!@ Send out "write snapshot id to disk" to cluster

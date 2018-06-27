@@ -26,6 +26,7 @@ use "wallaroo/core/source"
 use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/rebalancing"
 use "wallaroo/ent/router_registry"
+use "wallaroo/ent/snapshot"
 use "wallaroo/core/invariant"
 use "wallaroo/core/messages"
 use "wallaroo/core/routing"
@@ -95,9 +96,9 @@ class val DirectRouter is Router
     consume m
 
   fun routes_not_in(router: Router): Map[StepId, Consumer] val =>
-    let m = recover iso Map[StepId, Consumer] val end
-    for (id, c) in router.routes().values() do
-      if _target_id = id then
+    let m = recover iso Map[StepId, Consumer] end
+    for (id, c) in router.routes().pairs() do
+      if _target_id == id then
         return consume m
       end
     end
@@ -283,10 +284,11 @@ trait val OmniRouter is Equatable[OmniRouter]
   fun val update_stateless_partition_router(id: U128,
     pr: StatelessPartitionRouter): OmniRouter
 
-  fun routes(): Array[Consumer] val
   fun get_outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
 
-  fun routes_not_in(router: OmniRouter): Array[Consumer] val
+  fun routes(): Map[StepId, Consumer] val
+
+  fun routes_not_in(router: OmniRouter): Map[StepId, Consumer] val
 
   fun boundaries(): Map[String, OutgoingBoundary] val
 
@@ -672,7 +674,7 @@ class val StepIdRouter is OmniRouter
       | let s_id: StepId =>
         ifdef debug then Invariant(id == s_id) end
         try
-          let target = _data_routes(id)
+          let target = _data_routes(id)?
           m(id) = target
         else
           Fail()
@@ -703,7 +705,7 @@ class val StepIdRouter is OmniRouter
   fun routes_not_in(router: OmniRouter): Map[StepId, Consumer] val =>
     let m = recover iso Map[StepId, Consumer] end
     let other_routes = router.routes()
-    for (id, c) in routes() do
+    for (id, c) in routes().pairs() do
       if not other_routes.contains(id) then m(id) = c end
     end
     consume m
@@ -918,12 +920,12 @@ class val DataRouter is Equatable[DataRouter]
 
   fun register_producer(p_id: StepId, producer: Producer) =>
     for step in _data_routes.values() do
-      step.register_producer(p_id, producer where back_edge = true)
+      step.register_producer(p_id, producer)
     end
 
   fun unregister_producer(p_id: StepId, producer: Producer) =>
     for step in _data_routes.values() do
-      step.unregister_producer(p_id, producer where back_edge = true)
+      step.unregister_producer(p_id, producer)
     end
 
   fun request_ack(r_ids: Array[RouteId]) =>
@@ -1005,6 +1007,16 @@ class val DataRouter is Equatable[DataRouter]
       | let p: Producer =>
         p.remove_route_to_consumer(id, c)
       end
+    end
+
+  fun forward_snapshot_barrier(target_step_id: StepId,
+    origin_step_id: StepId, sr: SnapshotRequester, snapshot_id: SnapshotId)
+  =>
+    try
+      _data_routes(target_step_id)?.receive_snapshot_barrier(origin_step_id,
+        sr, snapshot_id)
+    else
+      Fail()
     end
 
   fun eq(that: box->DataRouter): Bool =>
@@ -1631,14 +1643,19 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
   fun routes(): Map[StepId, Consumer] val =>
     let m = recover iso Map[StepId, Consumer] end
 
-    for (id, s) in _partition_routes.pairs() do
-      match s
-      | let step: Step =>
-        m(id) = step
-      | let pr: ProxyRouter =>
-        for (r_id, r) in pr.routes().pairs() do
-          m(r_id) = r
+    for (p_id, s) in _partition_routes.pairs() do
+      try
+        let id = _step_ids(p_id)?
+        match s
+        | let step: Step =>
+          m(id) = step
+        | let pr: ProxyRouter =>
+          for (r_id, r) in pr.routes().pairs() do
+            m(r_id) = r
+          end
         end
+      else
+        Fail()
       end
     end
 

@@ -33,6 +33,7 @@ use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
+use "wallaroo/ent/snapshot"
 use "wallaroo/core/metrics"
 use "wallaroo/core/topology"
 
@@ -83,7 +84,7 @@ class _TestDataChannel is DataChannelListenNotify
         where event_log = event_log)
       let dr = DataReceivers(auth, conns, "worker_name")
       let rr = RouterRegistry(auth, "worker_name", dr, conns,
-        _DummyRecoveryFileCleaner, 1, false)
+        _DummyRecoveryFileCleaner, 1, false, SnapshotInitiator(conns))
       h.dispose_when_done(DataChannelListener(auth, consume this, rr))
       h.dispose_when_done(conns)
       h.complete_action("server create")

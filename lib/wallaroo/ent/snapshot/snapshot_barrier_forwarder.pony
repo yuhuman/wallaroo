@@ -11,6 +11,7 @@ the License. You may obtain a copy of the License at
 */
 
 use "collections"
+use "wallaroo/core/common"
 use "wallaroo_labs/mort"
 
 
@@ -38,7 +39,7 @@ class SnapshotBarrierForwarder
     _outputs = outputs
     _snapshot_id = s_id
 
-  fun input_blocking(id: StepId, sr: SnapshotRequester) =>
+  fun input_blocking(id: StepId, sr: SnapshotRequester): Bool =>
     _has_started_snapshot.contains(id)
 
   fun ref receive_snapshot_barrier(step_id: StepId, sr: SnapshotRequester,
@@ -59,40 +60,3 @@ class SnapshotBarrierForwarder
     else
       Fail()
     end
-
-
-  // !@
-  // fun ref ack_snapshot(s: Snapshottable, s_id: SnapshotId) =>
-  //   ifdef debug then
-  //     Invariant(_snapshot_in_progress)
-  //   end
-  //   if _outputs.contains(s) then
-  //     _has_acked.set(s)
-  //     if _outputs.size() == _has_acked.size() then
-  //       _all_acked = true
-  //       _snapshot_requester.snapshot_state()
-  //       for o in _outputs.values() do
-  //         o.receive_snapshot_barrier(_snapshot_requester, s_id)
-  //       end
-  //       if _back_edges_started.size() == _back_edges.size() then
-  //         _send_acks()
-  //       end
-  //     end
-  //   else
-  //     Fail()
-  //   end
-
-  // fun ref _send_acks() =>
-  //   for i in _normal_inputs.values() do
-  //     i.ack_snapshot(_snapshot_requester, _snapshot_id)
-  //   end
-  //   for i in _back_edges.values() do
-  //     i.ack_snapshot(_snapshot_requester, _snapshot_id)
-  //   end
-  //   _has_acked.clear()
-  //   _has_started_snapshot.clear()
-  //   _back_edges_started.clear()
-  //   _snapshot_in_progress = false
-  //   _snapshot_id = -1
-  //   _all_acked = false
-  //   _snapshot_requester.snapshot_complete()

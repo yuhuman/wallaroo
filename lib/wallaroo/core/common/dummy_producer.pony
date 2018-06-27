@@ -84,3 +84,8 @@ actor DummyProducer is Producer
   be application_ready_to_work(initializer: LocalTopologyInitializer) =>
     None
 
+  fun ref snapshot_state() =>
+    None
+
+  fun ref snapshot_complete() =>
+    None

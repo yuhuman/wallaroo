@@ -26,6 +26,7 @@ use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
+use "wallaroo/ent/snapshot"
 use "wallaroo/core/metrics"
 use "wallaroo/core/routing"
 use "wallaroo/core/state"
@@ -291,7 +292,11 @@ primitive _RouterRegistryGenerator
   fun apply(env: Env, auth: AmbientAuth): RouterRegistry =>
     RouterRegistry(auth, "", _DataReceiversGenerator(env, auth),
       _ConnectionsGenerator(env, auth), _DummyRecoveryFileCleaner, 0,
-      false)
+      false, _SnapshotInitiatorGenerator(env, auth))
+
+primitive _SnapshotInitiatorGenerator
+  fun apply(env: Env, auth: AmbientAuth): SnapshotInitiator =>
+    SnapshotInitiator(_ConnectionsGenerator(env, auth))
 
 primitive _DataReceiversGenerator
   fun apply(env: Env, auth: AmbientAuth): DataReceivers =>

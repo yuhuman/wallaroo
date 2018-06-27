@@ -426,3 +426,9 @@ actor _TestProducer is Producer
 
   be try_finish_in_flight_request_early(requester_id: StepId) =>
     None
+
+  fun ref snapshot_state() =>
+    None
+
+  fun ref snapshot_complete() =>
+    None
