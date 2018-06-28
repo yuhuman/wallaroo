@@ -49,7 +49,9 @@ class TypedRoute[In: Any val] is Route
     _route = _RouteLogic(step_id, step, consumer, "Typed")
 
   fun ref application_created() =>
-    _consumer.register_producer(_step_id, _step)
+    //!@
+    // _consumer.register_producer(_step_id, _step)
+    None
 
   fun ref application_initialized(step_type: String) =>
     _step_type = step_type

@@ -482,7 +482,7 @@ actor OutgoingBoundary is Consumer
     end
     try
       let msg = ChannelMsgEncoder.register_producer(_worker_name,
-        source_id, target_id)?
+        source_id, target_id, _auth)?
       writev(msg)
     else
       Fail()
@@ -497,7 +497,7 @@ actor OutgoingBoundary is Consumer
     end
     try
       let msg = ChannelMsgEncoder.unregister_producer(_worker_name,
-        source_id, target_id)?
+        source_id, target_id, _auth)?
       writev(msg)
     else
       Fail()

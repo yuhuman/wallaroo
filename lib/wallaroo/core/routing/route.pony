@@ -128,6 +128,13 @@ class EmptyRoute is Route
     Fail()
     true
 
+
+  fun register_producer(target_id: StepId) =>
+    Fail()
+
+  fun unregister_producer(target_id: StepId) =>
+    Fail()
+
   fun ref report_status(code: ReportStatusCode) =>
     Fail()
 

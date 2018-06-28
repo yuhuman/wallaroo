@@ -412,12 +412,12 @@ primitive ChannelMsgEncoder
   fun register_producer(sender: String, source_id: StepId, target_id: StepId,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(RegisterProducerMsg(sender, source_id, target_id), auth)
+    _encode(RegisterProducerMsg(sender, source_id, target_id), auth)?
 
   fun unregister_producer(sender: String, source_id: StepId, target_id: StepId,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(UnregisterProducerMsg(sender, source_id, target_id), auth)
+    _encode(UnregisterProducerMsg(sender, source_id, target_id), auth)?
 
   fun snapshot_barrier(target_id: StepId, origin_id: StepId,
     snapshot_id: SnapshotId, auth: AmbientAuth): Array[ByteSeq] val ?
