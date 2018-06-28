@@ -115,8 +115,15 @@ actor Step is (Producer & Consumer)
     for (c_id, consumer) in _router.routes().pairs() do
       _outputs(c_id) = consumer
       if not _routes.contains(consumer) then
-        _routes(consumer) =
-          _route_builder(_id, this, consumer, _metrics_reporter)
+        let new_route = _route_builder(_id, this, consumer, _metrics_reporter)
+        _routes(consumer) = new_route
+        new_route.register_producer(c_id)
+      else
+        try
+          _routes(consumer)?.register_producer(c_id)
+        else
+          Fail()
+        end
       end
     end
 
@@ -146,10 +153,24 @@ actor Step is (Producer & Consumer)
     omni_router: OmniRouter)
   =>
     for (c_id, consumer) in _router.routes().pairs() do
+      if _outputs.contains(c_id) then
+        try
+          _routes(consumer)?.unregister_producer(c_id)
+        else
+          Fail()
+        end
+      end
       _outputs(c_id) = consumer
       if not _routes.contains(consumer) then
-        _routes(consumer) =
-          _route_builder(_id, this, consumer, _metrics_reporter)
+        let new_route = _route_builder(_id, this, consumer, _metrics_reporter)
+        _routes(consumer) = new_route
+        new_route.register_producer(c_id)
+      else
+        try
+          _routes(consumer)?.register_producer(c_id)
+        else
+          Fail()
+        end
       end
     end
 
@@ -239,6 +260,7 @@ actor Step is (Producer & Consumer)
       if _outputs.contains(old_id) then
         try
           _outputs.remove(old_id)?
+          _routes(consumer)?.unregister_producer(old_id)
           _remove_route_if_no_output(outdated_consumer)
         else
           Fail()
@@ -246,14 +268,28 @@ actor Step is (Producer & Consumer)
       end
     end
     for (c_id, consumer) in _router.routes().pairs() do
+      if _outputs.contains(c_id) then
+        try
+          _routes(consumer)?.unregister_producer(c_id)
+        else
+          Fail()
+        end
+      end
+
       _outputs(c_id) = consumer
       if not _routes.contains(consumer) then
-        let new_route = _route_builder(_id, this, consumer,
-          _metrics_reporter)
+        let new_route = _route_builder(_id, this, consumer, _metrics_reporter)
+        _routes(consumer) = new_route
         ifdef "resilience" then
           _acker_x.add_route(new_route)
         end
-        _routes(consumer) = new_route
+        new_route.register_producer(c_id)
+      else
+        try
+          _routes(consumer)?.register_producer(c_id)
+        else
+          Fail()
+        end
       end
     end
 
@@ -264,6 +300,11 @@ actor Step is (Producer & Consumer)
       end
       try
         _outputs.remove(id)?
+        try
+          _routes(c)?.unregister_producer(id)
+        else
+          Fail()
+        end
         _remove_route_if_no_output(c)
       end
     end

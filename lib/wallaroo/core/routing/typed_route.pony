@@ -96,6 +96,12 @@ class TypedRoute[In: Any val] is Route
     Fail()
     true
 
+  fun register_producer(target_id: StepId) =>
+    _consumer.register_producer(_step_id, _step)
+
+  fun unregister_producer(target_id: StepId) =>
+    _consumer.unregister_producer(_step_id, _step)
+
   fun ref _send_message_on_route(metric_name: String, pipeline_time_spent: U64,
     input: In, cfp_id: StepId, cfp: Producer ref, msg_uid: MsgId,
     frac_ids: FractionalMessageId, latest_ts: U64, metrics_id: U16,
