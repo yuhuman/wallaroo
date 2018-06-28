@@ -131,6 +131,7 @@ class KeyedStateAddresses[Key: (Hashable val & Equatable[Key] val)]
     end
 
   fun register_routes(router: Router, route_builder: RouteBuilder) =>
+    @printf[I32]("!@ KeyedStateAddresses register routes\n".cstring())
     for s in _addresses.values() do
       match s
       | let step: Step =>
