@@ -54,7 +54,7 @@ class TCPFramedSourceNotify[In: Any val] is TCPSourceNotify
   let _handler: FramedSourceHandler[In] val
   let _runner: Runner
   var _router: Router
-  let _omni_router: OmniRouter = EmptyOmniRouter
+  let _target_id_router: TargetIdRouter = EmptyTargetIdRouter
   let _metrics_reporter: MetricsReporter
   let _header_size: USize
 
@@ -122,7 +122,7 @@ class TCPFramedSourceNotify[In: Any val] is TCPSourceNotify
               " source\n").cstring())
           end
           _runner.run[In](_pipeline_name, pipeline_time_spent, decoded,
-            _source_id, source, _router, _omni_router, _msg_id_gen(), None,
+            _source_id, source, _router, _target_id_router, _msg_id_gen(), None,
             decode_end_ts, latest_metrics_id, ingest_ts, _metrics_reporter)
         else
           @printf[I32](("Unable to decode message at " + _pipeline_name +
