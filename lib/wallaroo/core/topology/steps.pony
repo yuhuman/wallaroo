@@ -337,20 +337,24 @@ actor Step is (Producer & Consumer)
     end
 
   be update_target_id_router(target_id_router: TargetIdRouter) =>
-    //!@
-    // let old_router = _target_id_router
+    let old_router = _target_id_router
     _target_id_router = target_id_router
-    //!@
-    // for (old_id, outdated_consumer) in
-    //   old_router.routes_not_in(_target_id_router).pairs()
-    // do
-    //   if _outputs.contains(old_id) then
-    //     try
-    //       _outputs.remove(old_id)?
-    //       _remove_route_if_no_output(outdated_consumer)
-    //     end
-    //   end
-    // end
+    for (old_id, outdated_consumer) in
+      old_router.routes_not_in(_target_id_router).pairs()
+    do
+      if _outputs.contains(old_id) then
+        try
+          _routes(outdated_consumer)?.unregister_producer(old_id)
+          _outputs.remove(old_id)?
+          _remove_route_if_no_output(outdated_consumer)
+        end
+      end
+    end
+
+    for (id, consumer) in target_id_router.route().pairs() do
+      _register_output(id, consumer)
+    end
+
     _add_boundaries(target_id_router.boundaries())
 
   be add_boundaries(boundaries: Map[String, OutgoingBoundary] val) =>
