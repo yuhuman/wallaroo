@@ -1073,7 +1073,30 @@ actor LocalTopologyInitializer is LayoutInitializer
                     let pre_state_router = DirectRouter(b.id(), pre_state_step)
                     built_routers(b.id()) = pre_state_router
 
-                    state_step.register_routes(state_comp_target)
+                    let state_name = b.state_name()
+                    if state_name == "" then
+                      Fail()
+                    else
+                      try
+                        var ssr = state_step_routers(state_name)?
+                        match state_comp_target
+                        | let spr: StatelessPartitionRouter =>
+                          ssr = ssr.update_stateless_partition_router(
+                            spr.partition_id(), spr)
+                        else
+                          for (r_id, c) in state_comp_target.routes().pairs()
+                          do
+                            ssr = ssr.add_consumer(r_id, c)
+                          end
+                        end
+                        state_step_routers(state_name) = ssr
+                      else
+                        Fail()
+                      end
+                    end
+
+                    //!@
+                    // state_step.register_routes(state_comp_target)
 
                     // Add ins to this prestate node to the frontier
                     for in_in_node in in_node.ins() do
@@ -1398,7 +1421,29 @@ actor LocalTopologyInitializer is LayoutInitializer
                   @printf[I32]("!@ DirectRouter as expected\n".cstring())
                 end
                   @printf[I32]("!@ Registering router to %s\n".cstring(), tid.string().cstring())
-                pr.register_routes(target_router)
+
+                let state_name = psd.state_name()
+                if state_name == "" then
+                  Fail()
+                else
+                  try
+                    var ssr = state_step_routers(state_name)?
+                    match target_router
+                    | let spr: StatelessPartitionRouter =>
+                      ssr = ssr.update_stateless_partition_router(
+                        spr.partition_id(), spr)
+                    else
+                      for (r_id, c) in target_router.routes().pairs() do
+                        ssr = ssr.add_consumer(r_id, c)
+                      end
+                    end
+                    state_step_routers(state_name) = ssr
+                  else
+                    Fail()
+                  end
+                end
+                //!@
+                // pr.register_routes(target_router)
                 @printf[I32](("Registered routes on state steps for " +
                   psd.pre_state_name() + "\n").cstring())
               end

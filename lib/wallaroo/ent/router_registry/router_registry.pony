@@ -548,8 +548,8 @@ actor RouterRegistry is (InFlightAckRequester)
       obs_trn(w) = ob
     end
     let obs = consume val obs_trn
-    let new_target_id_router = target_id_router_blueprint.build_router(_worker_name,
-      obs, local_sinks)
+    let new_target_id_router = target_id_router_blueprint.build_router(
+      _worker_name, obs, local_sinks, _auth)
     _set_target_id_router(new_target_id_router)
     lti.set_target_id_router(new_target_id_router)
     lti.initialize_join_initializables()
