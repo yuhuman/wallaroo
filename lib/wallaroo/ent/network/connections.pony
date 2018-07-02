@@ -575,7 +575,8 @@ actor Connections is Cluster
   be create_routers_from_blueprints(
     pr_blueprints: Map[String, PartitionRouterBlueprint] val,
     spr_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
-    omr_blueprint: TargetIdRouterBlueprint, local_sinks: Map[StepId, Consumer] val,
+    tidr_blueprints: Map[String, TargetIdRouterBlueprint] val,
+    local_sinks: Map[StepId, Consumer] val,
     router_registry: RouterRegistry, lti: LocalTopologyInitializer)
   =>
     // We delegate to router registry through here to ensure that we've
@@ -583,7 +584,7 @@ actor Connections is Cluster
     // create_connections was called.
 
     // We must create the target_id_router first
-    router_registry.create_target_id_router_from_blueprint(omr_blueprint,
+    router_registry.create_target_id_routers_from_blueprint(tidr_blueprints,
       local_sinks, lti)
     router_registry.create_partition_routers_from_blueprints(
       pr_blueprints)

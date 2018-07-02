@@ -55,7 +55,9 @@ actor RouterRegistry is (InFlightAckRequester)
 
   var _local_topology_initializer: (LocalTopologyInitializer | None) = None
 
-  var _target_id_router: (TargetIdRouter | None) = None
+  // Map from state name to router for use on the corresponding state steps
+  var _target_id_routers: Map[String, TargetIdRouter] =
+    _target_id_routers.create()
 
   var _application_ready_to_work: Bool = false
 
@@ -72,8 +74,17 @@ actor RouterRegistry is (InFlightAckRequester)
   let _stateless_partition_router_subs:
     Map[U128, SetIs[RouterUpdateable]] =
       _stateless_partition_router_subs.create()
-  // All steps that have an TargetIdRouter
-  let _target_id_router_steps: SetIs[Step] = _target_id_router_steps.create()
+  // Certain TargetIdRouters need to keep track of changes to particular
+  // stateless partition routers. This is true when a state step needs to
+  // route outputs to a stateless partition. Map is from partition id to
+  // state name of state steps that need to know.
+  let _stateless_partition_routers_router_subs:
+    Map[U128, _StringSet] =
+    _stateless_partition_routers_router_subs.create()
+  // All steps that have a TargetIdRouter (state steps), registered by state
+  // name.
+  let _target_id_router_steps: Map[String, SetIs[Step]] =
+    _target_id_router_steps.create()
   //
   ////////////////
 
@@ -178,7 +189,16 @@ actor RouterRegistry is (InFlightAckRequester)
 
   fun ref _set_target_id_router(state_name: String, t: TargetIdRouter) =>
     var new_router = t.update_boundaries(_outgoing_boundaries)
-    _target_id_router = new_router
+    for id in new_router.stateless_partition_ids().values() do
+      _stateless_partition_routers_router_subs.insert_if_absent(id, _StringSet)
+      try
+        _stateless_partition_routers_router_subs(id)?.set(state_name)
+      else
+        Unreachable()
+      end
+    end
+    _target_id_routers(state_name) = new_router
+    _distribute_target_id_router(state_name)
 
   be set_event_log(e: EventLog) =>
     _event_log = e
@@ -389,14 +409,19 @@ actor RouterRegistry is (InFlightAckRequester)
   fun _distribute_data_router() =>
     _data_receivers.update_data_router(_data_router)
 
-  fun _distribute_target_id_router() =>
+  fun _distribute_target_id_router(state_name: String) =>
+    """
+    Distribute the TargetIdRouter used by state steps corresponding to state
+    name.
+    """
     try
-      for step in _target_id_router_steps.values() do
-        step.update_target_id_router(_target_id_router as TargetIdRouter)
+      let target_id_router = _target_id_routers(state_name)?
+      for step in _target_id_router_steps(state_name)?.values() do
+        step.update_target_id_router(target_id_router)
       end
       match _local_topology_initializer
       | let lti: LocalTopologyInitializer =>
-        lti.update_target_id_router(_target_id_router as TargetIdRouter)
+        lti.update_target_id_router(state_name, target_id_router)
       else
         Fail()
       end
@@ -538,8 +563,8 @@ actor RouterRegistry is (InFlightAckRequester)
       _stateless_partition_routers(id) = next_router
     end
 
-  be create_target_id_router_from_blueprint(
-    target_id_router_blueprint: TargetIdRouterBlueprint,
+  be create_target_id_routers_from_blueprint(
+    target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] val,
     local_sinks: Map[StepId, Consumer] val,
     lti: LocalTopologyInitializer)
   =>
@@ -548,10 +573,12 @@ actor RouterRegistry is (InFlightAckRequester)
       obs_trn(w) = ob
     end
     let obs = consume val obs_trn
-    let new_target_id_router = target_id_router_blueprint.build_router(
-      _worker_name, obs, local_sinks, _auth)
-    _set_target_id_router(new_target_id_router)
-    lti.set_target_id_router(new_target_id_router)
+    for (state_name, tidr) in target_id_router_blueprints.pairs() do
+      let new_target_id_router = target_id_router_blueprint.build_router(
+        _worker_name, obs, local_sinks, _auth)
+      _set_target_id_router(state_name, new_target_id_router)
+      lti.set_target_id_router(state_name, new_target_id_router)
+    end
     lti.initialize_join_initializables()
 
   be worker_join(conn: TCPConnection, worker: String,

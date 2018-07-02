@@ -244,7 +244,10 @@ actor LocalTopologyInitializer is LayoutInitializer
   var _stateless_partition_router_blueprints:
     Map[U128, StatelessPartitionRouterBlueprint] val =
       recover Map[U128, StatelessPartitionRouterBlueprint] end
-  var _target_id_router_blueprint: TargetIdRouterBlueprint = EmptyTargetIdRouterBlueprint
+  // Blueprints for the TargetIdRouters corresponding to each set of state
+  // steps (identified by a String state name).
+  var _target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] =
+    _target_id_router_blueprints.create()
 
   // Accumulate all TCPSourceListenerBuilders so we can build them
   // once EventLog signals we're ready
@@ -559,14 +562,18 @@ actor LocalTopologyInitializer is LayoutInitializer
   be set_partition_router_blueprints(
     pr_blueprints: Map[String, PartitionRouterBlueprint] val,
     spr_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
-    omr_blueprint: TargetIdRouterBlueprint)
+    tidr_blueprints: Map[String, TargetIdRouterBlueprint] val)
   =>
     _partition_router_blueprints = pr_blueprints
     _stateless_partition_router_blueprints = spr_blueprints
-    _target_id_router_blueprint = omr_blueprint
+    for (state_name, tidr) in tidr_blueprints.pairs() do
+      _target_id_router_blueprints(state_name) = tidr
+    end
 
-  be update_target_id_router(target_id_router: TargetIdRouter) =>
-    _target_id_router_blueprint = target_id_router.blueprint()
+  be update_target_id_router(state_name: String,
+    target_id_router: TargetIdRouter)
+  =>
+    _target_id_router_blueprints(state_name) = target_id_router.blueprint()
 
   be recover_and_initialize(ws: Array[String] val,
     cluster_initializer: (ClusterInitializer | None) = None)
@@ -1608,10 +1615,17 @@ actor LocalTopologyInitializer is LayoutInitializer
         _router_registry.register_boundaries(_outgoing_boundaries,
           _outgoing_boundary_builders)
 
+        let target_id_router_blueprints =
+          recover iso Map[String, TargetIdRouterBlueprint] end
+        for (s_name, tidr) in _target_id_router_blueprints.pairs() do
+          target_id_router_blueprints(s_name) = tidr
+        end
+
         _connections.create_routers_from_blueprints(
           _partition_router_blueprints,
-          _stateless_partition_router_blueprints, _target_id_router_blueprint,
-          consume local_sinks, _router_registry, this)
+          _stateless_partition_router_blueprints,
+          consume target_id_router_blueprints, consume local_sinks,
+          _router_registry, this)
 
         _save_local_topology()
         _save_worker_names()
