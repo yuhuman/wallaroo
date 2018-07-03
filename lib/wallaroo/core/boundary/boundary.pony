@@ -466,9 +466,6 @@ actor OutgoingBoundary is Consumer
   be forward_register_producer(source_id: StepId, target_id: StepId,
     producer: Producer)
   =>
-    ifdef debug then
-      Invariant(not _upstreams.contains(producer))
-    end
     try
       let msg = ChannelMsgEncoder.register_producer(_worker_name,
         source_id, target_id, _auth)?
