@@ -129,16 +129,6 @@ class KeyedStateAddresses[Key: (Hashable val & Equatable[Key] val)]
       None
     end
 
-    //!@
-  // fun register_routes(router: Router) =>
-  //   @printf[I32]("!@ KeyedStateAddresses register routes\n".cstring())
-  //   for s in _addresses.values() do
-  //     match s
-  //     | let step: Step =>
-  //       step.register_routes(router)
-  //     end
-  //   end
-
   fun steps(): Array[Consumer] val =>
     let ss = recover trn Array[Consumer] end
     for s in _addresses.values() do

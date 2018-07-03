@@ -114,14 +114,6 @@ actor Step is (Producer & Consumer)
       _register_output(c_id, consumer)
     end
 
-    //!@
-    // for boundary in _outgoing_boundaries.values() do
-    //   if not _routes.contains(boundary) then
-    //     _routes(boundary) =
-    //       _route_builder(_id, this, boundary, _metrics_reporter)
-    //   end
-    // end
-
     for r in _routes.values() do
       ifdef "resilience" then
         _acker_x.add_route(r)
@@ -137,47 +129,12 @@ actor Step is (Producer & Consumer)
     initializer.report_created(this)
 
   be application_created(initializer: LocalTopologyInitializer) =>
-    //!@ We shouldn't need this here.  This should happen whenever a router is
-    // updated
-    // for (c_id, consumer) in _router.routes().pairs() do
-    //   if _outputs.contains(c_id) then
-    //     try
-    //       _routes(consumer)?.unregister_producer(c_id)
-    //     else
-    //       Fail()
-    //     end
-    //   end
-    //   _outputs(c_id) = consumer
-    //   if not _routes.contains(consumer) then
-    //     let new_route = _route_builder(_id, this, consumer, _metrics_reporter)
-    //     _routes(consumer) = new_route
-    //     new_route.register_producer(c_id)
-    //   else
-    //     try
-    //       _routes(consumer)?.register_producer(c_id)
-    //     else
-    //       Fail()
-    //     end
-    //   end
-    // end
-
-    //!@
-    // for boundary in _outgoing_boundaries.values() do
-    //   if not _routes.contains(boundary) then
-    //     _routes(boundary) =
-    //       _route_builder(_id, this, boundary, _metrics_reporter)
-    //   end
-    // end
-
     for r in _routes.values() do
       r.application_created()
       ifdef "resilience" then
         _acker_x.add_route(r)
       end
     end
-
-    //!@
-    // _target_id_router = target_id_router
 
     _initialized = true
     initializer.report_initialized(this)
@@ -214,20 +171,6 @@ actor Step is (Producer & Consumer)
 
   be application_ready_to_work(initializer: LocalTopologyInitializer) =>
     None
-
-    //!@
-  // be register_routes(router: Router) =>
-  //   @printf[I32]("!@ Registering routes at state step!\n".cstring())
-  //   ifdef debug then
-  //     if _initialized then
-  //       Fail()
-  //     end
-  //   end
-
-  //   for (c_id, consumer) in router.routes().pairs() do
-  //     _register_output(c_id, consumer)
-  //     @printf[I32]("!@ Registered output %s at step %s\n".cstring(), c_id.string().cstring(), _id.string().cstring())
-  //   end
 
   be update_router(router: Router) =>
     _update_router(router)
@@ -697,7 +640,6 @@ actor Step is (Producer & Consumer)
   ///////////////
   // GROW-TO-FIT
   be receive_state(state: ByteSeq val) =>
-    // @printf[I32]("!@ Receiving state on %s\n".cstring(), _id.string().cstring())
     ifdef "autoscale" then
       try
         match Serialised.input(InputSerialisedAuth(_auth),

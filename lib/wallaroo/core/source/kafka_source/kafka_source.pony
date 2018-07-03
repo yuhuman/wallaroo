@@ -139,12 +139,6 @@ actor KafkaSource[In: Any val] is (Producer & InFlightAckResponder &
       _register_output(c_id, consumer)
     end
 
-    //!@
-    // for (worker, boundary) in _outgoing_boundaries.pairs() do
-    //   _routes(boundary) =
-    //     _route_builder(_source_id, this, boundary, _metrics_reporter)
-    // end
-
     _notify.update_boundaries(_outgoing_boundaries)
 
     for r in _routes.values() do

@@ -104,11 +104,6 @@ actor OutgoingBoundary is Consumer
   // Consumer
   var _upstreams: SetIs[Producer] = _upstreams.create()
 
-  //!@ We shouldn't need this since there should only be one id per upstream
-  // of a boundary, which has no immediate data receiver upstreams.
-  // _inputs keeps track of all inputs by step id.
-  let _inputs: Map[StepId, Producer] = _inputs.create()
-
   var _mute_outstanding: Bool = false
   var _in_flight_ack_waiter: InFlightAckWaiter = InFlightAckWaiter
 
@@ -458,8 +453,6 @@ actor OutgoingBoundary is Consumer
 
     _upstreams.set(producer)
 
-    //!@ Add to input channels??
-
   be unregister_producer(id: StepId, producer: Producer) =>
     @printf[I32]("!@ Unregistered producer %s at boundary %s. Total %s upstreams.\n".cstring(), id.string().cstring(), (digestof this).string().cstring(), _upstreams.size().string().cstring())
 
@@ -469,8 +462,6 @@ actor OutgoingBoundary is Consumer
     // end
 
     _upstreams.unset(producer)
-
-    //!@ Remove from input channels??
 
   be forward_register_producer(source_id: StepId, target_id: StepId,
     producer: Producer)

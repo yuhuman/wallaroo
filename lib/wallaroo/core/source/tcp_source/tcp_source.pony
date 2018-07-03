@@ -168,13 +168,6 @@ actor TCPSource is (Producer & InFlightAckResponder & StatusReporter)
       _register_output(c_id, consumer)
     end
 
-    //!@
-    // for (worker, boundary) in _outgoing_boundaries.pairs() do
-    //   _routes(boundary) =
-    //     RouteBuilder(_source_id, this, boundary, _metrics_reporter)
-    // end
-
-
     _pending_reads()
     //TODO: either only accept when we are done recovering or don't start
     //listening until we are done recovering

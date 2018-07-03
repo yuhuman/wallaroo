@@ -556,10 +556,6 @@ actor LocalTopologyInitializer is LayoutInitializer
     """
     _connections.quick_initialize_data_connections(this)
 
-    //!@
-  // be set_target_id_router(omr: TargetIdRouter) =>
-  //   _target_id_router = omr
-
   be set_partition_router_blueprints(
     pr_blueprints: Map[String, PartitionRouterBlueprint] val,
     spr_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
@@ -927,7 +923,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                     end
                   else
                     // This prestate has no computation targets
-                    @printf[I32]("!@ Prestate has no computation targets: EmptyRouter\n".cstring())
                     EmptyRouter
                   end
 
@@ -978,7 +973,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                     end
                   else
                     // This prestate has no computation targets
-                    @printf[I32]("!@ Prestate has no computation targets: EmptyRouter 965\n".cstring())
                     EmptyRouter
                   end
 
@@ -1102,9 +1096,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                       end
                     end
 
-                    //!@
-                    // state_step.register_routes(state_comp_target)
-
                     // Add ins to this prestate node to the frontier
                     for in_in_node in in_node.ins() do
                       if not built_routers.contains(in_in_node.id) then
@@ -1114,7 +1105,6 @@ actor LocalTopologyInitializer is LayoutInitializer
 
                     @printf[I32](("Finished handling " + in_node.value.name() +
                       " node\n").cstring())
-                    @printf[I32]("!@ That node is %s\n".cstring(), in_node.id.string().cstring())
                   else
                     @printf[I32](("State steps should only have prestate " +
                       "predecessors!\n").cstring())
@@ -1297,7 +1287,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                     EmptyRouter
                   end
                 else
-                  @printf[I32]("!@ No isprestate when it should be?\n".cstring())
                   EmptyRouter
                 end
 
@@ -1305,7 +1294,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                 if source_data.state_name() == "" then
                   let out_ids = _get_output_node_ids(next_node)?
 
-                  @printf[I32]("!@ Why are we here?\n".cstring())
                   match out_ids.size()
                   | 0 => EmptyRouter
                   | 1 => built_routers(out_ids(0)?)?
@@ -1350,7 +1338,6 @@ actor LocalTopologyInitializer is LayoutInitializer
 
               // Nothing connects to a source via an in edge locally,
               // so this just marks that we've built this one
-              @printf[I32]("!@ Putting EmptyRouter into %s\n".cstring(), next_id.string().cstring())
               built_routers(next_id) = EmptyRouter
             end
 
@@ -1364,7 +1351,6 @@ actor LocalTopologyInitializer is LayoutInitializer
 
             @printf[I32](("Finished handling " + next_node.value.name() +
               " node\n").cstring())
-            @printf[I32]("!@ That node is %s\n".cstring(), next_node.id.string().cstring())
           else
             frontier.unshift(next_node)
           end
@@ -1428,14 +1414,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                       tid.string().cstring())
                     error
                   end
-                //!@
-                match target_router
-                | let er: EmptyRouter =>
-                  @printf[I32]("!@ Somehow target_router is EmptyRouter\n".cstring())
-                | let dr: DirectRouter =>
-                  @printf[I32]("!@ DirectRouter as expected\n".cstring())
-                end
-                  @printf[I32]("!@ Registering router to %s\n".cstring(), tid.string().cstring())
 
                 let state_name = psd.state_name()
                 if state_name == "" then
@@ -1457,8 +1435,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                     Fail()
                   end
                 end
-                //!@
-                // pr.register_routes(target_router)
                 @printf[I32](("Registered routes on state steps for " +
                   psd.pre_state_name() + "\n").cstring())
               end

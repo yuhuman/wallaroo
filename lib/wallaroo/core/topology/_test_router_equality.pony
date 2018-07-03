@@ -167,8 +167,6 @@ class iso _TestTargetIdRouterEquality is UnitTest
 
     base_router = base_router.update_route_to_proxy(1, "w2")
     base_router = base_router.update_route_to_consumer(2, step2)
-    //!@
-    // base_router = base_router.add_boundary("w3", boundary3)
 
     h.assert_eq[Bool](true, base_router == target_router)
 

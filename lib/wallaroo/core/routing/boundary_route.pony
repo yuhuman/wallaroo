@@ -50,8 +50,6 @@ class BoundaryRoute is Route
     _route = _RouteLogic(step_id, step, consumer, "Boundary")
 
   fun ref application_created() =>
-    //!@
-    // _consumer.register_producer(_step_id, _step)
     None
 
   fun ref application_initialized(step_type: String) =>
