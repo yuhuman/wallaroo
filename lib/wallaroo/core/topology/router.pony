@@ -865,21 +865,30 @@ class val DataRouter is Equatable[DataRouter]
     end
 
   fun register_producer(input_id: StepId, output_id: StepId,
-    producer: Producer)
+    producer: DataReceiver ref)
   =>
-    try
-      _data_routes(output_id)?.register_producer(input_id, producer)
+    if _data_routes.contains(input_id) then
+      try
+        _data_routes(output_id)?.register_producer(input_id, producer)
+      else
+        @printf[I32]("!@ Failed to register_producer: inputid: %s, outputid: %s\n".cstring(), input_id.string().cstring(), output_id.string().cstring())
+        Unreachable()
+      end
     else
-      Fail()
+      producer.queue_register_producer(input_id, output_id)
     end
 
   fun unregister_producer(input_id: StepId, output_id: StepId,
-    producer: Producer)
+    producer: DataReceiver ref)
   =>
-    try
-      _data_routes(output_id)?.unregister_producer(input_id, producer)
+    if _data_routes.contains(input_id) then
+      try
+        _data_routes(output_id)?.unregister_producer(input_id, producer)
+      else
+        Fail()
+      end
     else
-      Fail()
+      producer.queue_unregister_producer(input_id, output_id)
     end
 
   // fun register_producer(producer: Producer) =>

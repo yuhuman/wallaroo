@@ -466,6 +466,7 @@ actor OutgoingBoundary is Consumer
   be forward_register_producer(source_id: StepId, target_id: StepId,
     producer: Producer)
   =>
+    @printf[I32]("!@ Forward Registered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
     try
       let msg = ChannelMsgEncoder.register_producer(_worker_name,
         source_id, target_id, _auth)?
@@ -478,9 +479,11 @@ actor OutgoingBoundary is Consumer
   be forward_unregister_producer(source_id: StepId, target_id: StepId,
     producer: Producer)
   =>
-    ifdef debug then
-      Invariant(_upstreams.contains(producer))
-    end
+    @printf[I32]("!@ Forward UNRegistered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
+    //!@
+    // ifdef debug then
+    //   Invariant(_upstreams.contains(producer))
+    // end
     try
       let msg = ChannelMsgEncoder.unregister_producer(_worker_name,
         source_id, target_id, _auth)?

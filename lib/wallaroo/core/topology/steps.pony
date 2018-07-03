@@ -182,13 +182,7 @@ actor Step is (Producer & Consumer)
       old_router.routes_not_in(_router).pairs()
     do
       if _outputs.contains(old_id) then
-        try
-          _outputs.remove(old_id)?
-          _routes(outdated_consumer)?.unregister_producer(old_id)
-          _remove_route_if_no_output(outdated_consumer)
-        else
-          Fail()
-        end
+        _unregister_output(old_id, outdated_consumer)
       end
     end
     for (c_id, consumer) in _router.routes().pairs() do
@@ -198,20 +192,14 @@ actor Step is (Producer & Consumer)
   fun ref _register_output(id: StepId, c: Consumer) =>
     if _outputs.contains(id) then
       try
-        if _outputs(id)? is c then
+        let old_c = _outputs(id)?
+        if old_c is c then
           // We already know about this output.
           return
         end
+        _unregister_output(id, old_c)
       else
         Unreachable()
-      end
-
-      try
-        _routes(c)?.unregister_producer(id)
-        _outputs.remove(id)?
-        _remove_route_if_no_output(c)
-      else
-        Fail()
       end
     end
 
@@ -231,17 +219,22 @@ actor Step is (Producer & Consumer)
       end
     end
 
+  fun ref _unregister_output(id: StepId, c: Consumer) =>
+    try
+      _routes(c)?.unregister_producer(id)
+      _outputs.remove(id)?
+      _remove_route_if_no_output(c)
+    else
+      Fail()
+    end
+
   fun ref _unregister_all_outputs() =>
     """
     This method should only be called if we are removing this step from the
     active graph (or on dispose())
     """
     for (id, consumer) in _outputs.pairs() do
-      try
-        _routes(consumer)?.unregister_producer(id)
-      else
-        Fail()
-      end
+      _unregister_output(id, consumer)
     end
 
   be remove_route_to_consumer(id: StepId, c: Consumer) =>
@@ -249,15 +242,7 @@ actor Step is (Producer & Consumer)
       ifdef debug then
         Invariant(_routes.contains(c))
       end
-      try
-        _outputs.remove(id)?
-        try
-          _routes(c)?.unregister_producer(id)
-        else
-          Fail()
-        end
-        _remove_route_if_no_output(c)
-      end
+      _unregister_output(id, c)
     end
 
   fun ref _remove_route_if_no_output(c: Consumer) =>
@@ -286,11 +271,7 @@ actor Step is (Producer & Consumer)
       old_router.routes_not_in(_target_id_router).pairs()
     do
       if _outputs.contains(old_id) then
-        try
-          _routes(outdated_consumer)?.unregister_producer(old_id)
-          _outputs.remove(old_id)?
-          _remove_route_if_no_output(outdated_consumer)
-        end
+        _unregister_output(old_id, outdated_consumer)
       end
     end
 
@@ -319,18 +300,22 @@ actor Step is (Producer & Consumer)
     _remove_boundary(worker)
 
   fun ref _remove_boundary(worker: String) =>
-    if _outgoing_boundaries.contains(worker) then
-      try
-        let boundary = _outgoing_boundaries(worker)?
-        _outgoing_boundaries.remove(worker)?
-        if _routes.contains(boundary) then
-          _routes(boundary)?.dispose()
-          _routes.remove(boundary)?
-        end
-      else
-        Fail()
-      end
-    end
+    None
+    //!@
+    // try
+    //   let old_ob = _outgoing_boundaries.remove(worker)?._2
+    //   _routes(old_ob)?.dispose()
+    //   for (id, c) in _outputs.pairs() do
+    //     match c
+    //     | let ob: OutgoingBoundary =>
+    //       if ob is old_ob then
+    //         _unregister_output(id, c)
+    //       end
+    //     end
+    //   end
+    // else
+    //   Fail()
+    // end
 
   be remove_route_for(step: Consumer) =>
     try
@@ -674,7 +659,8 @@ actor Step is (Producer & Consumer)
     boundary: OutgoingBoundary, state_name: String, key: K)
   =>
     ifdef "autoscale" then
-      _unregister_all_outputs()
+      //@!
+      // _unregister_all_outputs()
       match _step_message_processor
       | let nmp: NormalStepMessageProcessor =>
         // TODO: Should this be possible?

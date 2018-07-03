@@ -261,12 +261,9 @@ actor RouterRegistry is (InFlightAckRequester)
     sub: RouterUpdateable)
   =>
     try
-      if _partition_router_subs.contains(state_name) then
-        _partition_router_subs(state_name)?.set(sub)
-      else
-        _partition_router_subs(state_name) = SetIs[RouterUpdateable]
-        _partition_router_subs(state_name)?.set(sub)
-      end
+      _partition_router_subs.insert_if_absent(state_name,
+        SetIs[RouterUpdateable])?
+      _partition_router_subs(state_name)?.set(sub)
     else
       Fail()
     end
@@ -431,10 +428,10 @@ actor RouterRegistry is (InFlightAckRequester)
     let state_name = partition_router.state_name()
 
     try
-      if not _partition_router_subs.contains(state_name) then
-        _partition_router_subs(state_name) = SetIs[RouterUpdateable]
-      end
+      _partition_router_subs.insert_if_absent(state_name,
+        SetIs[RouterUpdateable])?
       for sub in _partition_router_subs(state_name)?.values() do
+        @printf[I32]("!@ -> Distribute partition router\n".cstring())
         sub.update_router(partition_router)
       end
     else
