@@ -199,9 +199,7 @@ actor OutgoingBoundary is Consumer
     _initializer = initializer
     initializer.report_created(this)
 
-  be application_created(initializer: LocalTopologyInitializer,
-    target_id_router: TargetIdRouter)
-  =>
+  be application_created(initializer: LocalTopologyInitializer) =>
     _connect_count = @pony_os_connect_tcp[U32](this,
       _host.cstring(), _service.cstring(),
       _from.cstring())

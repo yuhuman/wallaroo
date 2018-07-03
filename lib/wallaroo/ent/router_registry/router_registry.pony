@@ -190,11 +190,12 @@ actor RouterRegistry is (InFlightAckRequester)
   fun ref _set_target_id_router(state_name: String, t: TargetIdRouter) =>
     var new_router = t.update_boundaries(_outgoing_boundaries)
     for id in new_router.stateless_partition_ids().values() do
-      _stateless_partition_routers_router_subs.insert_if_absent(id, _StringSet)
       try
+        _stateless_partition_routers_router_subs.insert_if_absent(id,
+          _StringSet)?
         _stateless_partition_routers_router_subs(id)?.set(state_name)
       else
-        Unreachable()
+        Fail()
       end
     end
     _target_id_routers(state_name) = new_router
@@ -219,25 +220,11 @@ actor RouterRegistry is (InFlightAckRequester)
     if not _stop_the_world_in_process and _application_ready_to_work then
       source.unmute(_dummy_consumer)
     end
-    match _target_id_router
-    | let omnr: TargetIdRouter =>
-      _target_id_router = omnr.add_source(source_id, source)
-    else
-      Fail()
-    end
-    _distribute_target_id_router()
     _connections.register_disposable(source)
     _connections.notify_cluster_of_new_source(source_id)
 
   be register_remote_source(sender: String, source_id: StepId) =>
-    match _target_id_router
-    | let omnr: TargetIdRouter =>
-      _target_id_router = omnr.add_source(source_id, ProxyAddress(sender,
-        source_id))
-    else
-      Fail()
-    end
-    _distribute_target_id_router()
+    None
 
   be register_source_listener(source_listener: SourceListener) =>
     _source_listeners.set(source_listener)
@@ -324,11 +311,24 @@ actor RouterRegistry is (InFlightAckRequester)
       Fail()
     end
 
-  be register_target_id_router_step(s: Step) =>
-    _register_target_id_router_step(s)
+  be register_target_id_router_step(state_name: String, step: Step) =>
+    _register_target_id_router_step(state_name, step)
 
-  fun ref _register_target_id_router_step(s: Step) =>
-    _target_id_router_steps.set(s)
+  fun ref _register_target_id_router_step(state_name: String, step: Step) =>
+    try
+      _target_id_router_steps.insert_if_absent(state_name, SetIs[Step])?
+      _target_id_router_steps(state_name)?.set(step)
+    else
+      Fail()
+    end
+    if _target_id_routers.contains(state_name) then
+      try
+        let target_id_router = _target_id_routers(state_name)?
+        step.update_target_id_router(target_id_router)
+      else
+        Unreachable()
+      end
+    end
 
   be register_boundaries(bs: Map[String, OutgoingBoundary] val,
     bbs: Map[String, OutgoingBoundaryBuilder] val)
@@ -360,8 +360,10 @@ actor RouterRegistry is (InFlightAckRequester)
         end
       end
     end
-    for step in _target_id_router_steps.values() do
-      step.add_boundaries(new_boundaries_sendable)
+    for steps in _target_id_router_steps.values() do
+      for step in steps.values() do
+        step.add_boundaries(new_boundaries_sendable)
+      end
     end
     for step in _data_router.routes().values() do
       match step
@@ -400,22 +402,18 @@ actor RouterRegistry is (InFlightAckRequester)
 
   be register_data_receiver(worker: String, dr: DataReceiver) =>
     _data_receiver_map(worker) = dr
-    match _target_id_router
-    | let omnr: TargetIdRouter =>
-      _target_id_router = omnr.add_data_receiver(worker, dr)
-      _distribute_target_id_router()
-    end
 
   fun _distribute_data_router() =>
     _data_receivers.update_data_router(_data_router)
 
-  fun _distribute_target_id_router(state_name: String) =>
+  fun ref _distribute_target_id_router(state_name: String) =>
     """
     Distribute the TargetIdRouter used by state steps corresponding to state
     name.
     """
     try
       let target_id_router = _target_id_routers(state_name)?
+      _target_id_router_steps.insert_if_absent(state_name, SetIs[Step])?
       for step in _target_id_router_steps(state_name)?.values() do
         step.update_target_id_router(target_id_router)
       end
@@ -461,14 +459,26 @@ actor RouterRegistry is (InFlightAckRequester)
     else
       Fail()
     end
-    match _target_id_router
-    | let omni: TargetIdRouter =>
-      _target_id_router = omni.update_stateless_partition_router(partition_id,
-        partition_router)
-    else
-      Fail()
+
+    if _stateless_partition_routers_router_subs.contains(partition_id) then
+      try
+        let state_names =
+          _stateless_partition_routers_router_subs(partition_id)?
+        for state_name in state_names.values() do
+          try
+            let target_id_router = _target_id_routers(state_name)?
+            _target_id_routers(state_name) = target_id_router.
+              update_stateless_partition_router(partition_id, partition_router)
+            _distribute_target_id_router(state_name)
+          else
+            // We should have already registered this TargetIdRouter at startup
+            Fail()
+          end
+        end
+      else
+        Unreachable()
+      end
     end
-    _distribute_target_id_router()
 
   fun ref _remove_worker(worker: String) =>
     try
@@ -476,16 +486,19 @@ actor RouterRegistry is (InFlightAckRequester)
     else
       Fail()
     end
-    _remove_worker_from_target_id_router(worker)
+    //!@
+    // _remove_worker_from_target_id_router(worker)
+
     _distribute_boundary_removal(worker)
 
-  fun ref _remove_worker_from_target_id_router(worker: String) =>
-    match _target_id_router
-    | let omnr: TargetIdRouter =>
-      _target_id_router = omnr.remove_boundary(worker).remove_data_receiver(worker)
-    end
+    //!@
+  // fun ref _remove_worker_from_target_id_router(worker: String) =>
+  //   match _target_id_router
+  //   | let omnr: TargetIdRouter =>
+  //     _target_id_router = omnr.remove_boundary(worker).remove_data_receiver(worker)
+  //   end
 
-    _distribute_target_id_router()
+  //   _distribute_target_id_router()
 
   fun ref _distribute_boundary_removal(worker: String) =>
     for subs in _partition_router_subs.values() do
@@ -504,8 +517,10 @@ actor RouterRegistry is (InFlightAckRequester)
         end
       end
     end
-    for step in _target_id_router_steps.values() do
-      step.remove_boundary(worker)
+    for steps in _target_id_router_steps.values() do
+      for step in steps.values() do
+        step.remove_boundary(worker)
+      end
     end
 
     for source in _sources.values() do
@@ -574,10 +589,10 @@ actor RouterRegistry is (InFlightAckRequester)
     end
     let obs = consume val obs_trn
     for (state_name, tidr) in target_id_router_blueprints.pairs() do
-      let new_target_id_router = target_id_router_blueprint.build_router(
-        _worker_name, obs, local_sinks, _auth)
+      let new_target_id_router = tidr.build_router(_worker_name, obs,
+        local_sinks, _auth)
       _set_target_id_router(state_name, new_target_id_router)
-      lti.set_target_id_router(state_name, new_target_id_router)
+      lti.update_target_id_router(state_name, new_target_id_router)
     end
     lti.initialize_join_initializables()
 
@@ -610,29 +625,25 @@ actor RouterRegistry is (InFlightAckRequester)
     local_topology: LocalTopology)
   =>
     let state_blueprints =
-      recover trn Map[String, PartitionRouterBlueprint] end
+      recover iso Map[String, PartitionRouterBlueprint] end
     for (w, r) in _partition_routers.pairs() do
       state_blueprints(w) = r.blueprint()
     end
 
     let stateless_blueprints =
-      recover trn Map[U128, StatelessPartitionRouterBlueprint] end
+      recover iso Map[U128, StatelessPartitionRouterBlueprint] end
     for (id, r) in _stateless_partition_routers.pairs() do
       stateless_blueprints(id) = r.blueprint()
     end
 
-    let target_id_router_blueprint =
-      match _target_id_router
-      | let omr: TargetIdRouter =>
-        omr.blueprint()
-      else
-        Fail()
-        EmptyTargetIdRouterBlueprint
-      end
+    let tidr_blueprints = recover iso Map[String, TargetIdRouterBlueprint] end
+    for (state_name, tidr) in _target_id_routers.pairs() do
+      tidr_blueprints(state_name) = tidr.blueprint()
+    end
 
     _connections.inform_joining_worker(conn, worker, local_topology,
       consume state_blueprints, consume stateless_blueprints,
-      target_id_router_blueprint)
+      consume tidr_blueprints)
 
   be inform_contacted_worker_of_initialization() =>
     _inform_contacted_worker_of_initialization()
@@ -819,10 +830,12 @@ actor RouterRegistry is (InFlightAckRequester)
 
   fun ref _try_resume_the_world() =>
     if _initiated_stop_the_world then
+      //!@ Do we need this here? We don't know the state name anymore.
       // Since we don't need all steps to be up to date on the TargetIdRouter
       // during migrations, we wait on the worker that initiated stop the
       // world to distribute it until here to avoid unnecessary messaging.
-      _distribute_target_id_router()
+      // _distribute_target_id_router()
+
       let in_flight_resume_ack_id = _in_flight_ack_waiter
         .initiate_resume_request(ResumeTheWorldAction(this))
       _request_in_flight_resume_acks(in_flight_resume_ack_id,
@@ -926,12 +939,8 @@ actor RouterRegistry is (InFlightAckRequester)
     end
 
     let target_workers: Array[(String, OutgoingBoundary)] val =
-      match _target_id_router
-      | let omr: TargetIdRouter =>
-        omr.get_outgoing_boundaries_sorted()
-      | None =>
-        recover val Array[(String, OutgoingBoundary)] end
-      end
+      _outgoing_boundaries_sorted()
+
     Invariant(target_workers.size() == _outgoing_boundaries.size())
 
     @printf[I32]("Migrating all partitions to %d remaining workers\n".cstring(),
@@ -1018,12 +1027,14 @@ actor RouterRegistry is (InFlightAckRequester)
       AckFinishedCompleteAction(_auth, _worker_name, originating_worker,
         request_id, _connections))
     then
+      //!@ This seems wrong now because we don't know state name yet.
       // We need to ensure that all steps have the correct TargetIdRouter before
       // we can propagate the in_flight_resume request. On the workers that
       // did not initiate stop the world, we wait to distribute the TargetIdRouter
       // until this point since we don't need it to be up-to-date everywhere
       // during migration.
-      _distribute_target_id_router()
+      // _distribute_target_id_router()
+
       _request_in_flight_resume_acks(in_flight_resume_ack_id,
         leaving_workers)
     end
@@ -1315,9 +1326,10 @@ actor RouterRegistry is (InFlightAckRequester)
   fun ref _prepare_shrink(remaining_workers: Array[String] val,
     leaving_workers: Array[String] val)
   =>
-    for w in leaving_workers.values() do
-      _remove_worker_from_target_id_router(w)
-    end
+    //!@
+    // for w in leaving_workers.values() do
+    //   _remove_worker_from_target_id_router(w)
+    // end
 
     if not _stop_the_world_in_process then
       _stop_the_world_in_process = true
@@ -1464,7 +1476,8 @@ actor RouterRegistry is (InFlightAckRequester)
     Called when a step has been migrated off this worker to another worker
     """
     _remove_step_from_data_router(id)
-    _add_proxy_to_target_id_router(id, proxy_address)
+    //!@
+    // _add_proxy_to_target_id_router(id, proxy_address)
 
   be add_state_proxy[K: (Hashable val & Equatable[K] val)](id: StepId,
     proxy_address: ProxyAddress, key: K, state_name: String)
@@ -1473,7 +1486,8 @@ actor RouterRegistry is (InFlightAckRequester)
     Called when a stateful step has been added to another worker
     """
     _add_state_proxy_to_partition_router[K](proxy_address, key, state_name)
-    _add_proxy_to_target_id_router(id, proxy_address)
+    //!@
+    // _add_proxy_to_target_id_router(id, proxy_address)
 
   fun ref _add_state_proxy_to_partition_router[
     K: (Hashable val & Equatable[K] val)](proxy_address: ProxyAddress,
@@ -1501,15 +1515,16 @@ actor RouterRegistry is (InFlightAckRequester)
       Fail()
     end
 
-  fun ref _add_proxy_to_target_id_router(id: StepId,
-    proxy_address: ProxyAddress)
-  =>
-    match _target_id_router
-    | let o: TargetIdRouter =>
-      _target_id_router = o.update_route_to_proxy(id, proxy_address.worker)
-    else
-      Fail()
-    end
+//!@
+  // fun ref _add_proxy_to_target_id_router(id: StepId,
+  //   proxy_address: ProxyAddress)
+  // =>
+  //   match _target_id_router
+  //   | let o: TargetIdRouter =>
+  //     _target_id_router = o.update_route_to_proxy(id, proxy_address.worker)
+  //   else
+  //     Fail()
+  //   end
 
   /////
   // Step moved onto this worker
@@ -1525,17 +1540,12 @@ actor RouterRegistry is (InFlightAckRequester)
 
     match _event_log
     | let event_log: EventLog =>
-      match _target_id_router
-      | let omnr: TargetIdRouter =>
-        let step = Step(_auth, runner_builder(where event_log = event_log,
-          auth = _auth), consume reporter, msg.step_id(),
-          event_log, recovery_replayer,
-          consume outgoing_boundaries where target_id_router = omnr)
-        step.receive_state(msg.state())
-        msg.update_router_registry(this, step)
-      else
-        Fail()
-      end
+      let step = Step(_auth, runner_builder(where event_log = event_log,
+        auth = _auth), consume reporter, msg.step_id(),
+        event_log, recovery_replayer,
+        consume outgoing_boundaries)
+      step.receive_state(msg.state())
+      msg.update_router_registry(this, step)
     else
       Fail()
     end
@@ -1551,29 +1561,34 @@ actor RouterRegistry is (InFlightAckRequester)
     try
       match target
       | let step: Step =>
-        _register_target_id_router_step(step)
+        _register_target_id_router_step(state_name, step)
         _data_router = _data_router.add_route(id, step)
         _distribute_data_router()
         let partition_router =
           _partition_routers(state_name)?.update_route[K](key, step)?
         _distribute_partition_router(partition_router)
+
+        //!@ We shouldn't need this since all this info should have been
+        // passed over in TargetIdRouterBlueprint.
         // Add routes to state computation targets to state step
-        match _pre_state_data
-        | let psds: Array[PreStateData] val =>
-          for psd in psds.values() do
-            if psd.state_name() == state_name then
-              for tid in psd.target_ids().values() do
-                try
-                  let target_router =
-                    DirectRouter(tid, _data_router.step_for_id(tid)?)
-                  step.register_routes(target_router)
-                end
-              end
-            end
-          end
-        else
-          Fail()
-        end
+        // match _pre_state_data
+        // | let psds: Array[PreStateData] val =>
+        //   for psd in psds.values() do
+        //     if psd.state_name() == state_name then
+        //       for tid in psd.target_ids().values() do
+        //         try
+        //           !@ We shouldn't register this way. Use TargetIdRouter
+        //           let target_router =
+        //             DirectRouter(tid, _data_router.step_for_id(tid)?)
+        //           step.register_routes(target_router)
+        //         end
+        //       end
+        //     end
+        //   end
+        // else
+        //   Fail()
+        // end
+
         _partition_routers(state_name) = partition_router
       else
         Fail()
@@ -1591,12 +1606,33 @@ actor RouterRegistry is (InFlightAckRequester)
     """
     Called when a step has been migrated to this worker from another worker
     """
-    match _target_id_router
-    | let o: TargetIdRouter =>
-      _target_id_router = o.update_route_to_consumer(id, target)
-    else
-      Fail()
+    None
+    //!@
+    // match _target_id_router
+    // | let o: TargetIdRouter =>
+    //   _target_id_router = o.update_route_to_consumer(id, target)
+    // else
+    //   Fail()
+    // end
+
+  fun ref _outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
+  =>
+    let keys = Array[String]
+    for k in _outgoing_boundaries.keys() do
+      keys.push(k)
     end
+
+    let sorted_keys = Sort[Array[String], String](keys)
+
+    let diff = recover trn Array[(String, OutgoingBoundary)] end
+    for sorted_key in sorted_keys.values() do
+      try
+        diff.push((sorted_key, _outgoing_boundaries(sorted_key)?))
+      else
+        Fail()
+      end
+    end
+    consume diff
 
 class MigrationAction is CustomAction
   let _registry: RouterRegistry

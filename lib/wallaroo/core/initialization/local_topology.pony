@@ -88,7 +88,8 @@ class val LocalTopology
     recovery_replayer: RecoveryReplayer,
     auth: AmbientAuth, outgoing_boundaries: Map[String, OutgoingBoundary] val,
     initializables: SetIs[Initializable],
-    data_routes: Map[U128, Consumer tag]) ?
+    data_routes: Map[U128, Consumer tag],
+    state_steps: Map[String, Array[Step]]) ?
   =>
     let subpartition =
       try
@@ -104,7 +105,7 @@ class val LocalTopology
         .cstring())
       state_map(state_name) = subpartition.build(_app_name, _worker_name,
          metrics_conn, auth, event_log, recovery_replayer, outgoing_boundaries,
-         initializables, data_routes)
+         initializables, data_routes, state_steps)
     end
 
   fun graph(): Dag[StepInitializer] val => _graph
@@ -230,7 +231,6 @@ actor LocalTopologyInitializer is LayoutInitializer
   let _step_id_gen: StepIdGenerator = StepIdGenerator
 
   // Lifecycle
-  var _target_id_router: (TargetIdRouter | None) = None
   var _created: SetIs[Initializable] = _created.create()
   var _initialized: SetIs[Initializable] = _initialized.create()
   var _ready_to_work: SetIs[Initializable] = _ready_to_work.create()
@@ -556,8 +556,9 @@ actor LocalTopologyInitializer is LayoutInitializer
     """
     _connections.quick_initialize_data_connections(this)
 
-  be set_target_id_router(omr: TargetIdRouter) =>
-    _target_id_router = omr
+    //!@
+  // be set_target_id_router(omr: TargetIdRouter) =>
+  //   _target_id_router = omr
 
   be set_partition_router_blueprints(
     pr_blueprints: Map[String, PartitionRouterBlueprint] val,
@@ -766,15 +767,14 @@ actor LocalTopologyInitializer is LayoutInitializer
         // Keep track of all stateless partition routers we've built
         let stateless_partition_routers = Map[U128, StatelessPartitionRouter]
 
-        // Keep track of steps we've built that we'll use for the TargetIdRouter.
-        // Unlike data_routes, these will not include state steps, which will
-        // never be direct targets for state computation outputs.
         let built_stateless_steps = recover trn Map[U128, Consumer] end
+
+        let built_state_steps = Map[String, Array[Step]]
 
         // Keep track of routes we can actually use for messages arriving at
         // state steps (this depends on the state steps' upstreams across
         // pipelines). Map from state name to router.
-        let state_step_routers = Map[String, StateStepRouter]
+        let state_step_routers = Map[String, TargetIdRouter]
 
         /////////
         // Initialize based on DAG
@@ -882,11 +882,11 @@ actor LocalTopologyInitializer is LayoutInitializer
                     let state_name = builder.state_name()
                     state_step_routers.insert_if_absent(state_name,
                       StateStepRouter.from_boundaries(_worker_name,
-                        _outgoing_boundaries))
+                        _outgoing_boundaries))?
                     t.update_state_map(state_name, state_map,
                       _metrics_conn, _event_log, _recovery_replayer, _auth,
                       _outgoing_boundaries, _initializables,
-                      data_routes_ref)?
+                      data_routes_ref, built_state_steps)?
                   else
                     @printf[I32]("Failed to update state_map\n".cstring())
                     error
@@ -1258,10 +1258,14 @@ actor LocalTopologyInitializer is LayoutInitializer
               // Create the state partition if it doesn't exist
               if source_data.state_name() != "" then
                 try
-                  t.update_state_map(source_data.state_name(), state_map,
+                  let state_name = source_data.state_name()
+                  state_step_routers.insert_if_absent(state_name,
+                    StateStepRouter.from_boundaries(_worker_name,
+                      _outgoing_boundaries))?
+                  t.update_state_map(state_name, state_map,
                     _metrics_conn, _event_log, _recovery_replayer, _auth,
                     _outgoing_boundaries, _initializables,
-                    data_routes_ref)?
+                    data_routes_ref, built_state_steps)?
                 else
                   @printf[I32]("Failed to update state map\n".cstring())
                   error
@@ -1389,10 +1393,14 @@ actor LocalTopologyInitializer is LayoutInitializer
             // now
             if psd.state_name() != "" then
               try
-                t.update_state_map(psd.state_name(), state_map,
+                let state_name = psd.state_name()
+                state_step_routers.insert_if_absent(state_name,
+                  StateStepRouter.from_boundaries(_worker_name,
+                    _outgoing_boundaries))?
+                t.update_state_map(state_name, state_map,
                   _metrics_conn, _event_log, _recovery_replayer, _auth,
                   _outgoing_boundaries, _initializables,
-                  data_routes_ref)?
+                  data_routes_ref, built_state_steps)?
               else
                 @printf[I32]("Failed to update state map\n".cstring())
                 error
@@ -1493,6 +1501,20 @@ actor LocalTopologyInitializer is LayoutInitializer
         _router_registry.register_boundaries(_outgoing_boundaries,
           _outgoing_boundary_builders)
 
+        // Register all TargetIdRouters with RouterRegistry.
+        for (state_name, ssr) in state_step_routers.pairs() do
+          _router_registry.set_target_id_router(state_name, ssr)
+          _target_id_router_blueprints(state_name) = ssr.blueprint()
+        end
+
+        // Register all state steps with RouterRegistry. This will ensure that
+        // they always have the latest TargetIdRouter.
+        for (state_name, steps) in built_state_steps.pairs() do
+          for s in steps.values() do
+            _router_registry.register_target_id_router_step(state_name, s)
+          end
+        end
+
         let stateless_partition_routers_trn =
           recover trn Map[U128, StatelessPartitionRouter] end
         for (id, router) in stateless_partition_routers.pairs() do
@@ -1503,14 +1525,6 @@ actor LocalTopologyInitializer is LayoutInitializer
           _router_registry.set_stateless_partition_router(id, pr)
         end
 
-        let target_id_router = StepIdRouter(_worker_name,
-          sendable_data_routes, t.step_map(), _outgoing_boundaries,
-          consume stateless_partition_routers_trn,
-          recover Map[StepId, (ProxyAddress | Source)] end,
-          recover Map[String, DataReceiver] end)
-        _router_registry.set_target_id_router(target_id_router)
-
-        _target_id_router = target_id_router
         for i in _initializables.values() do
           i.application_begin_reporting(this)
         end
@@ -1752,23 +1766,14 @@ actor LocalTopologyInitializer is LayoutInitializer
 
   be report_created(initializable: Initializable) =>
     if not _created.contains(initializable) then
-      match _target_id_router
-      | let o_router: TargetIdRouter =>
-        _created.set(initializable)
-        if _created.size() == _initializables.size() then
-          @printf[I32]("|~~ INIT PHASE I: Application is created! ~~|\n"
-            .cstring())
-          _spin_up_source_listeners()
-          for i in _initializables.values() do
-            i.application_created(this, o_router)
-            match i
-            | let s: Step =>
-              _router_registry.register_target_id_router_step(s)
-            end
-          end
+      _created.set(initializable)
+      if _created.size() == _initializables.size() then
+        @printf[I32]("|~~ INIT PHASE I: Application is created! ~~|\n"
+          .cstring())
+        _spin_up_source_listeners()
+        for i in _initializables.values() do
+          i.application_created(this)
         end
-      else
-        Fail()
       end
     else
       @printf[I32]("The same Initializable reported being created twice\n"

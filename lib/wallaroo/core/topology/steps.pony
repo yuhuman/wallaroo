@@ -136,9 +136,7 @@ actor Step is (Producer & Consumer)
   be application_begin_reporting(initializer: LocalTopologyInitializer) =>
     initializer.report_created(this)
 
-  be application_created(initializer: LocalTopologyInitializer,
-    target_id_router: TargetIdRouter)
-  =>
+  be application_created(initializer: LocalTopologyInitializer) =>
     //!@ We shouldn't need this here.  This should happen whenever a router is
     // updated
     // for (c_id, consumer) in _router.routes().pairs() do
@@ -178,7 +176,8 @@ actor Step is (Producer & Consumer)
       end
     end
 
-    _target_id_router = target_id_router
+    //!@
+    // _target_id_router = target_id_router
 
     _initialized = true
     initializer.report_initialized(this)
@@ -216,18 +215,19 @@ actor Step is (Producer & Consumer)
   be application_ready_to_work(initializer: LocalTopologyInitializer) =>
     None
 
-  be register_routes(router: Router) =>
-    @printf[I32]("!@ Registering routes at state step!\n".cstring())
-    ifdef debug then
-      if _initialized then
-        Fail()
-      end
-    end
+    //!@
+  // be register_routes(router: Router) =>
+  //   @printf[I32]("!@ Registering routes at state step!\n".cstring())
+  //   ifdef debug then
+  //     if _initialized then
+  //       Fail()
+  //     end
+  //   end
 
-    for (c_id, consumer) in router.routes().pairs() do
-      _register_output(c_id, consumer)
-      @printf[I32]("!@ Registered output %s at step %s\n".cstring(), c_id.string().cstring(), _id.string().cstring())
-    end
+  //   for (c_id, consumer) in router.routes().pairs() do
+  //     _register_output(c_id, consumer)
+  //     @printf[I32]("!@ Registered output %s at step %s\n".cstring(), c_id.string().cstring(), _id.string().cstring())
+  //   end
 
   be update_router(router: Router) =>
     _update_router(router)
@@ -351,7 +351,7 @@ actor Step is (Producer & Consumer)
       end
     end
 
-    for (id, consumer) in target_id_router.route().pairs() do
+    for (id, consumer) in target_id_router.routes().pairs() do
       _register_output(id, consumer)
     end
 

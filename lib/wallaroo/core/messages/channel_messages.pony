@@ -245,7 +245,7 @@ primitive ChannelMsgEncoder
     partition_blueprints: Map[String, PartitionRouterBlueprint] val,
     stateless_partition_blueprints:
       Map[U128, StatelessPartitionRouterBlueprint] val,
-    target_id_router_blueprint: TargetIdRouterBlueprint,
+    target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] val,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
@@ -255,7 +255,7 @@ primitive ChannelMsgEncoder
     _encode(InformJoiningWorkerMsg(worker_name, metric_app_name, l_topology,
       metric_host, metric_service, control_addrs, data_addrs, worker_names,
       partition_blueprints, stateless_partition_blueprints,
-      target_id_router_blueprint), auth)?
+      target_id_router_blueprints), auth)?
 
   fun inform_join_error(msg: String, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
@@ -816,7 +816,7 @@ class val InformJoiningWorkerMsg is ChannelMsg
   let partition_router_blueprints: Map[String, PartitionRouterBlueprint] val
   let stateless_partition_router_blueprints:
     Map[U128, StatelessPartitionRouterBlueprint] val
-  let target_id_router_blueprint: TargetIdRouterBlueprint
+  let target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] val
 
   new val create(sender: String, app: String, l_topology: LocalTopology,
     m_host: String, m_service: String,
@@ -825,7 +825,7 @@ class val InformJoiningWorkerMsg is ChannelMsg
     w_names: Array[String] val,
     p_blueprints: Map[String, PartitionRouterBlueprint] val,
     stateless_p_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
-    omr_blueprint: TargetIdRouterBlueprint)
+    tidr_blueprints: Map[String, TargetIdRouterBlueprint] val)
   =>
     sender_name = sender
     local_topology = l_topology
@@ -837,7 +837,7 @@ class val InformJoiningWorkerMsg is ChannelMsg
     worker_names = w_names
     partition_router_blueprints = p_blueprints
     stateless_partition_router_blueprints = stateless_p_blueprints
-    target_id_router_blueprint = omr_blueprint
+    target_id_router_blueprints = tidr_blueprints
 
 class val InformJoinErrorMsg is ChannelMsg
   let message: String

@@ -179,9 +179,7 @@ actor TCPSink is Sink
     _initializer = initializer
     initializer.report_created(this)
 
-  be application_created(initializer: LocalTopologyInitializer,
-    target_id_router: TargetIdRouter)
-  =>
+  be application_created(initializer: LocalTopologyInitializer) =>
     _mute_upstreams()
     initializer.report_initialized(this)
 

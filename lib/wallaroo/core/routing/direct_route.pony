@@ -63,8 +63,8 @@ class DirectRoute is Route
   fun ref dispose() =>
     _route.dispose()
 
-  fun ref run[D](metric_name: String, pipeline_time_spent: U64, data: D,
-    cfp_id: StepId, cfp: Producer ref, msg_uid: MsgId,
+  fun ref run[D: Any val](metric_name: String, pipeline_time_spent: U64,
+    data: D, cfp_id: StepId, cfp: Producer ref, msg_uid: MsgId,
     frac_ids: FractionalMessageId, latest_ts: U64, metrics_id: U16,
     worker_ingress_ts: U64)
   =>

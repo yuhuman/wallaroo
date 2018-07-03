@@ -18,8 +18,6 @@ Copyright 2017 The Wallaroo Authors.
 
 use "collections"
 use "net"
-use "wallaroo_labs/equality"
-use "wallaroo_labs/mort"
 use "wallaroo/core/boundary"
 use "wallaroo/core/common"
 use "wallaroo/core/source"
@@ -32,6 +30,9 @@ use "wallaroo/core/messages"
 use "wallaroo/core/routing"
 use "wallaroo/core/sink"
 use "wallaroo/core/state"
+use "wallaroo_labs/collection_helpers"
+use "wallaroo_labs/equality"
+use "wallaroo_labs/mort"
 
 trait val Router
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
@@ -271,12 +272,16 @@ trait val TargetIdRouter is Equatable[TargetIdRouter]
 
   fun val update_route_to_proxy(id: StepId, worker: String): TargetIdRouter
 
+  fun val remove_proxy(id: StepId, worker: String, boundary: OutgoingBoundary):
+    TargetIdRouter
+
   fun val update_route_to_consumer(id: StepId, step: Consumer): TargetIdRouter
+
+  fun val add_consumer(id: StepId, consumer: Consumer): TargetIdRouter
+  fun val remove_consumer(id: StepId, consumer: Consumer): TargetIdRouter
 
   fun val update_stateless_partition_router(id: StepId,
     pr: StatelessPartitionRouter): TargetIdRouter
-
-  fun get_outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
 
   fun routes(): Map[StepId, Consumer] val
 
@@ -308,8 +313,19 @@ class val EmptyTargetIdRouter is TargetIdRouter
   =>
     this
 
+  fun val remove_proxy(id: StepId, worker: String, boundary: OutgoingBoundary):
+    TargetIdRouter
+  =>
+    this
+
   fun val update_route_to_consumer(id: StepId, step: Consumer): TargetIdRouter
   =>
+    this
+
+  fun val add_consumer(id: StepId, consumer: Consumer): TargetIdRouter =>
+    this
+
+  fun val remove_consumer(id: StepId, consumer: Consumer): TargetIdRouter =>
     this
 
   fun val update_stateless_partition_router(id: StepId,
@@ -319,10 +335,6 @@ class val EmptyTargetIdRouter is TargetIdRouter
 
   fun routes(): Map[StepId, Consumer] val =>
     recover Map[StepId, Consumer] end
-
-  fun get_outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
-  =>
-    recover val Array[(String, OutgoingBoundary)] end
 
   fun routes_not_in(router: TargetIdRouter): Map[StepId, Consumer] val =>
     recover Map[StepId, Consumer] end
@@ -518,14 +530,19 @@ class val StateStepRouter is TargetIdRouter
       dr(c_id) = c
     end
     dr(id) = consumer
-    var new_router = StateStepRouter(_worker_name, consume dr, _proxies,
-      _outgoing_boundaries, _stateless_partitions, _target_workers)
+    var new_router: TargetIdRouter = StateStepRouter(_worker_name, consume dr,
+      _proxies, _outgoing_boundaries, _stateless_partitions, _target_workers)
 
     // If we have a proxy to this step, then we need to remove it now.
     if _proxies.contains(id) then
       try
         let pa = _proxies(id)?
-        new_router = new_router.remove_proxy(id, pa.worker)
+        try
+          new_router = new_router.remove_proxy(id, pa.worker,
+            _outgoing_boundaries(pa.worker)?)
+        else
+          Fail()
+        end
       else
         Unreachable()
       end
@@ -578,8 +595,8 @@ class val StateStepRouter is TargetIdRouter
         _target_workers
       end
 
-    var new_router = StateStepRouter(_worker_name, _consumers, consume ps,
-      _outgoing_boundaries, _stateless_partitions, tws)
+    var new_router: TargetIdRouter = StateStepRouter(_worker_name, _consumers,
+      consume ps, _outgoing_boundaries, _stateless_partitions, tws)
 
     // If we have a reference to a consumer for this id, then we need to
     // remove it now.
@@ -624,7 +641,7 @@ class val StateStepRouter is TargetIdRouter
     TargetIdRouter
   =>
     let m = recover iso Map[String, OutgoingBoundary] end
-    for (w, b) in obs.values() do
+    for (w, b) in obs.pairs() do
       m(w) = b
     end
     StateStepRouter(_worker_name, _consumers, _proxies, consume m,
@@ -639,27 +656,7 @@ class val StateStepRouter is TargetIdRouter
     end
     sps(id) = pr
     StateStepRouter(_worker_name, _consumers, _proxies, _outgoing_boundaries,
-      consume sps, tws)
-
-  //!@ We should be using RouterRegistry's map for this and remove this method.
-  fun get_outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
-  =>
-    let keys = Array[String]
-    for k in _outgoing_boundaries.keys() do
-      keys.push(k)
-    end
-
-    let sorted_keys = Sort[Array[String], String](keys)
-
-    let diff = recover trn Array[(String, OutgoingBoundary)] end
-    for sorted_key in sorted_keys.values() do
-      try
-        diff.push((sorted_key, _outgoing_boundaries(sorted_key)?))
-      else
-        Fail()
-      end
-    end
-    consume diff
+      consume sps, _target_workers)
 
   fun routes(): Map[StepId, Consumer] val =>
     let rs = recover iso Map[StepId, Consumer] end
@@ -674,7 +671,7 @@ class val StateStepRouter is TargetIdRouter
         Fail()
       end
     end
-    for sp in _stateless_partitions.pairs() do
+    for sp in _stateless_partitions.values() do
       for (id, c) in sp.routes().pairs() do
         rs(id) = c
       end
@@ -709,7 +706,12 @@ class val StateStepRouter is TargetIdRouter
     for (id, pa) in _proxies.pairs() do
       step_map(id) = pa
     end
-    StateStepRouterBlueprint(consume step_map, _stateless_partitions)
+    let sp_blueprints =
+      recover iso Map[U128, StatelessPartitionRouterBlueprint] end
+    for (p_id, sp) in _stateless_partitions.pairs() do
+      sp_blueprints(p_id) = sp.blueprint()
+    end
+    StateStepRouterBlueprint(consume step_map, consume sp_blueprints)
 
 //!@
 // class val StepIdRouter //is TargetIdRouter
@@ -1132,7 +1134,7 @@ class val StateStepRouterBlueprint is TargetIdRouterBlueprint
     stateless_partitions: Map[U128, StatelessPartitionRouterBlueprint] val)
   =>
     _step_map = step_map
-    _stateless_partitions = stateless_partitions
+    _stateless_partition_routers = stateless_partitions
 
   fun build_router(worker_name: String,
     outgoing_boundaries: Map[String, OutgoingBoundary] val,
@@ -1141,7 +1143,7 @@ class val StateStepRouterBlueprint is TargetIdRouterBlueprint
   =>
     let consumers = recover iso Map[StepId, Consumer] end
     let proxies = recover iso Map[StepId, ProxyAddress] end
-    let target_workers = recover iso Array[String] end
+    let target_workers = SetIs[String]
     for (id, pa) in _step_map.pairs() do
       if local_sinks.contains(id) then
         try
@@ -1151,21 +1153,23 @@ class val StateStepRouterBlueprint is TargetIdRouterBlueprint
         end
       else
         proxies(id) = pa
-        if not ArrayHelpers[String].contains[String](target_workers, pa.worker)
-        then
-          target_workers.push(pa.worker)
-        end
+        target_workers.set(pa.worker)
       end
     end
     let stateless_rs = recover iso Map[U128, StatelessPartitionRouter] end
-    for (p_id, sr) in _stateless_partitions.pairs() do
+    for (p_id, sr) in _stateless_partition_routers.pairs() do
       stateless_rs(p_id) = sr.build_router(worker_name, outgoing_boundaries,
         auth)
     end
 
+    let tws = recover iso Array[String] end
+    for w in target_workers.values() do
+      tws.push(w)
+    end
+
     StateStepRouter(worker_name, consume consumers,
       consume proxies, outgoing_boundaries, consume stateless_rs,
-      consume target_workers)
+      consume tws)
 
 class val DataRouter is Equatable[DataRouter]
   let _data_routes: Map[StepId, Consumer] val
@@ -1438,7 +1442,6 @@ class val DataRouter is Equatable[DataRouter]
 trait val PartitionRouter is (Router & Equatable[PartitionRouter])
   fun state_name(): String
   fun local_map(): Map[StepId, Step] val
-  fun register_routes(router: Router)
   fun update_route[K: (Hashable val & Equatable[K] val)](
     raw_k: K, target: (Step | ProxyRouter)): PartitionRouter ?
   fun rebalance_steps_grow(
@@ -1564,17 +1567,6 @@ class val LocalPartitionRouter[In: Any val,
   =>
     LocalPartitionRouter[NewIn, Key, S](_state_name, _worker_name,
       _local_map, _step_ids, _partition_routes, new_p_function)
-
-  fun register_routes(router: Router) =>
-    @printf[I32]("!@ PartitionRouter registering routes\n".cstring())
-
-    for r in _partition_routes.values() do
-      match r
-      | let step: Step =>
-        @printf[I32]("!@ PR: Registering with a step.\n".cstring())
-        step.register_routes(router)
-      end
-    end
 
   fun routes(): Map[StepId, Consumer] val =>
     let m = recover iso Map[StepId, Consumer] end
@@ -1909,7 +1901,6 @@ class val LocalPartitionRouterBlueprint[In: Any val,
 trait val StatelessPartitionRouter is (Router &
   Equatable[StatelessPartitionRouter])
   fun partition_id(): U128
-  fun register_routes(router: Router)
   fun update_route(partition_id': U64, target: (Step | ProxyRouter)):
     StatelessPartitionRouter ?
   // Total number of steps in partition
@@ -1988,14 +1979,6 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     else
       // Can't find route
       (true, latest_ts)
-    end
-
-  fun register_routes(router: Router) =>
-    for r in _partition_routes.values() do
-      match r
-      | let step: Step =>
-        step.register_routes(router)
-      end
     end
 
   fun routes(): Map[StepId, Consumer] val =>
