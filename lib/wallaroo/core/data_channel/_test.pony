@@ -29,7 +29,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use "ponytest"
 use "wallaroo/core/boundary"
+use "wallaroo/ent/barrier"
 use "wallaroo/ent/data_receiver"
+use "wallaroo/ent/in_flight_acking"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
@@ -84,8 +86,11 @@ class _TestDataChannel is DataChannelListenNotify
         where event_log = event_log)
       let dr = DataReceivers(auth, conns, "worker_name")
       let rr = RouterRegistry(auth, "worker_name", dr, conns,
-        _DummyRecoveryFileCleaner, 1, false, SnapshotInitiator(conns, 1,
-        false))
+        _DummyRecoveryFileCleaner, 1, false,
+        BarrierInitiator(auth, "worker_name", conns),
+        SnapshotInitiator(conns, 1, false),
+        InFlightAckInitiator("worker_name", BarrierInitiator(auth,
+        "worker_name", conns)))
       h.dispose_when_done(DataChannelListener(auth, consume this, rr))
       h.dispose_when_done(conns)
       h.complete_action("server create")

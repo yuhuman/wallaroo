@@ -28,17 +28,20 @@ use "wallaroo_labs/mort"
 use "wallaroo_labs/options"
 use "wallaroo/core/boundary"
 use "wallaroo/core/common/"
+use "wallaroo/core/initialization"
+use "wallaroo/core/messages"
+use "wallaroo/core/metrics"
+use "wallaroo/core/topology"
+use "wallaroo/ent/barrier"
 use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/cluster_manager"
+use "wallaroo/ent/in_flight_acking"
 use "wallaroo/ent/network"
 use "wallaroo/ent/recovery"
 use "wallaroo/ent/router_registry"
 use "wallaroo/ent/snapshot"
 use "wallaroo/ent/spike"
-use "wallaroo/core/initialization"
-use "wallaroo/core/messages"
-use "wallaroo/core/metrics"
-use "wallaroo/core/topology"
+
 
 actor Startup
   let _env: Env
@@ -316,6 +319,12 @@ actor Startup
         _startup_options.time_between_snapshots,
         _startup_options.snapshots_enabled)
 
+      let barrier_initiator = BarrierInitiator(auth,
+        _startup_options.worker_name, connections)
+
+      let in_flight_ack_initiator = InFlightAckInitiator(
+        _startup_options.worker_name, barrier_initiator)
+
       _setup_shutdown_handler(connections, this, auth)
 
       let data_receivers = DataReceivers(auth, connections,
@@ -324,7 +333,8 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause,
-        _is_joining, snapshot_initiator)
+        _is_joining, barrier_initiator, snapshot_initiator,
+        in_flight_ack_initiator)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 
@@ -340,8 +350,8 @@ actor Startup
           _application, _startup_options.worker_name,
           _env, auth, connections, router_registry, metrics_conn,
           _startup_options.is_initializer, data_receivers, event_log, recovery,
-          recovery_replayer, snapshot_initiator, _local_topology_file,
-          _data_channel_file, _worker_names_file)
+          recovery_replayer, snapshot_initiator, barrier_initiator,
+          _local_topology_file, _data_channel_file, _worker_names_file)
 
       if (_external_host != "") or (_external_service != "") then
         let external_channel_notifier =
@@ -376,7 +386,7 @@ actor Startup
         ControlChannelListenNotifier(_startup_options.worker_name,
           auth, connections, _startup_options.is_initializer,
           _cluster_initializer, local_topology_initializer, recovery,
-          recovery_replayer, router_registry,
+          recovery_replayer, router_registry, barrier_initiator,
           control_channel_filepath, _startup_options.my_d_host,
           _startup_options.my_d_service, event_log, this)
 
@@ -481,6 +491,12 @@ actor Startup
         _startup_options.time_between_snapshots,
         _startup_options.snapshots_enabled)
 
+      let barrier_initiator = BarrierInitiator(auth,
+        _startup_options.worker_name, connections)
+
+      let in_flight_ack_initiator = InFlightAckInitiator(
+        _startup_options.worker_name, barrier_initiator)
+
       _setup_shutdown_handler(connections, this, auth)
 
       let data_receivers = DataReceivers(auth, connections,
@@ -489,7 +505,8 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause, _is_joining,
-        snapshot_initiator, m.sender_name)
+        barrier_initiator, snapshot_initiator, in_flight_ack_initiator,
+        m.sender_name)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 
@@ -506,8 +523,8 @@ actor Startup
           _env, auth, connections, router_registry, metrics_conn,
           _startup_options.is_initializer, data_receivers,
           event_log, recovery, recovery_replayer, snapshot_initiator,
-          _local_topology_file, _data_channel_file, _worker_names_file
-          where is_joining = true)
+          barrier_initiator, _local_topology_file, _data_channel_file,
+          _worker_names_file where is_joining = true)
 
       if (_external_host != "") or (_external_service != "") then
         let external_channel_notifier =
@@ -551,7 +568,8 @@ actor Startup
         ControlChannelListenNotifier(_startup_options.worker_name,
           auth, connections, _startup_options.is_initializer,
           _cluster_initializer, local_topology_initializer, recovery,
-          recovery_replayer, router_registry, control_channel_filepath,
+          recovery_replayer, router_registry, barrier_initiator,
+          control_channel_filepath,
           _startup_options.my_d_host, _startup_options.my_d_service,
           event_log, this)
 

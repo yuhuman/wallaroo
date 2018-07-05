@@ -160,8 +160,9 @@ class Autoscale
   fun ref waiting_for_migration(joining_workers: Array[String] val) =>
     _phase = _WaitingForMigration(this, joining_workers)
 
-  fun ref ready_for_join_migration() =>
-    _phase.ready_for_join_migration()
+    //!@
+  // fun ref ready_for_join_migration() =>
+  //   _phase.ready_for_join_migration()
 
   fun ref stop_the_world_for_join_migration_initiated(
     joining_workers: Array[String] val)
@@ -172,6 +173,7 @@ class Autoscale
     _phase.join_migration_initiated()
 
   fun ref begin_join_migration(joining_workers: Array[String] val) =>
+    @printf[I32]("!@ begin_join_migration\n".cstring())
     _phase = _WaitingForJoinMigration(this, _auth, joining_workers
       where is_coordinator = false)
     _router_registry.begin_join_migration(joining_workers)
@@ -230,10 +232,10 @@ class Autoscale
   fun ref leaving_worker_finished_migration(worker: String) =>
     _phase.leaving_worker_finished_migration(worker)
 
-  fun ref all_leaving_workers_finished() =>
+  fun ref all_leaving_workers_finished(leaving_workers: Array[String] val) =>
     _phase = _WaitingForResumeTheWorld(this, _auth
       where is_coordinator = false)
-    _router_registry.all_leaving_workers_finished()
+    _router_registry.all_leaving_workers_finished(leaving_workers)
 
   fun ref autoscale_complete() =>
     _phase.autoscale_complete()
@@ -294,9 +296,10 @@ trait AutoscalePhase
     _print_invalid_call_debug_info()
     Fail()
 
-  fun ref ready_for_join_migration() =>
-    _print_invalid_call_debug_info()
-    Fail()
+//!@
+  // fun ref ready_for_join_migration() =>
+  //   _print_invalid_call_debug_info()
+  //   Fail()
 
   fun ref all_step_migration_complete() =>
     _print_invalid_call_debug_info()
@@ -548,8 +551,9 @@ class _WaitingForStopTheWorld is AutoscalePhase
 class _WaitingForMigration is AutoscalePhase
   let _autoscale: Autoscale ref
   let _joining_workers: Array[String] val
-  var _ready_for_migration: Bool = false
-  var _migration_initiated: Bool = false
+  //!@
+  // var _ready_for_migration: Bool = false
+  // var _migration_initiated: Bool = false
 
   new create(autoscale: Autoscale ref, joining_workers: Array[String] val) =>
     _autoscale = autoscale
@@ -560,16 +564,25 @@ class _WaitingForMigration is AutoscalePhase
   fun name(): String => "WaitingForMigration"
 
   fun ref join_migration_initiated() =>
-    _migration_initiated = true
-    if _ready_for_migration then
+    @printf[I32]("!@ join_migration_initiated\n".cstring())
+    //!@
+    // _migration_initiated = true
+    // if _ready_for_migration then
       _autoscale.begin_join_migration(_joining_workers)
-    end
+//!@
+    // else
+    //   @printf[I32]("!@ but _ready_for_migration is false\n".cstring())
+    // end
 
-  fun ref ready_for_join_migration() =>
-    _ready_for_migration = true
-    if _migration_initiated then
-      _autoscale.begin_join_migration(_joining_workers)
-    end
+//!@
+  // fun ref ready_for_join_migration() =>
+  //   @printf[I32]("!@ ready_for_join_migration\n".cstring())
+  //   _ready_for_migration = true
+  //   if _migration_initiated then
+  //     _autoscale.begin_join_migration(_joining_workers)
+  //   else
+  //     @printf[I32]("!@ but _migration_initiated is false\n".cstring())
+  //   end
 
 class _WaitingForJoinMigration is AutoscalePhase
   """
@@ -654,8 +667,9 @@ class _JoiningWorker is AutoscalePhase
   fun ref join_migration_initiated() =>
     None
 
-  fun ref ready_for_join_migration() =>
-    None
+//!2
+  // fun ref ready_for_join_migration() =>
+  //   None
 
   fun ref autoscale_complete() =>
     _autoscale.mark_autoscale_complete()
@@ -691,7 +705,7 @@ class _InitiatingShrink is AutoscalePhase
     end
     _leaving_workers_waiting_list.unset(worker)
     if _leaving_workers_waiting_list.size() == 0 then
-      _autoscale.all_leaving_workers_finished()
+      _autoscale.all_leaving_workers_finished(_leaving_workers)
     end
 
 class _ShrinkInProgress is AutoscalePhase
@@ -720,7 +734,7 @@ class _ShrinkInProgress is AutoscalePhase
     end
     _leaving_workers_waiting_list.unset(worker)
     if _leaving_workers_waiting_list.size() == 0 then
-      _autoscale.all_leaving_workers_finished()
+      _autoscale.all_leaving_workers_finished(_leaving_workers)
     end
 
 class _WaitingForLeavingMigration is AutoscalePhase
