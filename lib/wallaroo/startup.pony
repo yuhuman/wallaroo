@@ -315,12 +315,12 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
-      let snapshot_initiator = SnapshotInitiator(connections,
-        _startup_options.time_between_snapshots,
-        _startup_options.snapshots_enabled)
-
       let barrier_initiator = BarrierInitiator(auth,
         _startup_options.worker_name, connections)
+
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots, barrier_initiator,
+        _startup_options.snapshots_enabled, _startup_options.is_initializer)
 
       let in_flight_ack_initiator = InFlightAckInitiator(
         _startup_options.worker_name, barrier_initiator)
@@ -333,8 +333,7 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause,
-        _is_joining, barrier_initiator, snapshot_initiator,
-        in_flight_ack_initiator)
+        _is_joining, barrier_initiator, in_flight_ack_initiator)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 
@@ -487,12 +486,12 @@ actor Startup
       _connections = connections
       connections.register_disposable(this)
 
-      let snapshot_initiator = SnapshotInitiator(connections,
-        _startup_options.time_between_snapshots,
-        _startup_options.snapshots_enabled)
-
       let barrier_initiator = BarrierInitiator(auth,
         _startup_options.worker_name, connections)
+
+      let snapshot_initiator = SnapshotInitiator(connections,
+        _startup_options.time_between_snapshots, barrier_initiator,
+        _startup_options.snapshots_enabled)
 
       let in_flight_ack_initiator = InFlightAckInitiator(
         _startup_options.worker_name, barrier_initiator)
@@ -505,8 +504,7 @@ actor Startup
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
         connections, this, _startup_options.stop_the_world_pause, _is_joining,
-        barrier_initiator, snapshot_initiator, in_flight_ack_initiator,
-        m.sender_name)
+        barrier_initiator, in_flight_ack_initiator, m.sender_name)
       router_registry.set_event_log(event_log)
       event_log.set_router_registry(router_registry)
 

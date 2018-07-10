@@ -187,17 +187,7 @@ actor DataReceiver is Producer
   ///////////////
   // SNAPSHOTS
   ///////////////
-  be forward_snapshot_barrier(target_step_id: StepId, origin_step_id: StepId,
-    snapshot_id: SnapshotId)
-  =>
-    _router.forward_snapshot_barrier(target_step_id, origin_step_id, this,
-      snapshot_id)
-
   fun ref snapshot_state(snapshot_id: SnapshotId) =>
-    // Nothing to do at this point.
-    None
-
-  fun ref snapshot_complete() =>
     // Nothing to do at this point.
     None
 

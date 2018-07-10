@@ -49,7 +49,6 @@ actor RouterRegistry
   let _worker_name: String
   let _connections: Connections
   let _recovery_file_cleaner: RecoveryFileCleaner
-  let _snapshot_initiator: SnapshotInitiator
   let _barrier_initiator: BarrierInitiator
   let _in_flight_ack_initiator: InFlightAckInitiator
   var _data_router: DataRouter =
@@ -151,7 +150,6 @@ actor RouterRegistry
     data_receivers: DataReceivers, c: Connections,
     recovery_file_cleaner: RecoveryFileCleaner, stop_the_world_pause: U64,
     is_joining: Bool, barrier_initiator: BarrierInitiator,
-    snapshot_initiator: SnapshotInitiator,
     in_flight_ack_initiator: InFlightAckInitiator,
     contacted_worker: (String | None) = None)
   =>
@@ -161,7 +159,6 @@ actor RouterRegistry
     _connections = c
     _recovery_file_cleaner = recovery_file_cleaner
     _barrier_initiator = barrier_initiator
-    _snapshot_initiator = snapshot_initiator
     _in_flight_ack_initiator = in_flight_ack_initiator
     _stop_the_world_pause = stop_the_world_pause
     _connections.register_disposable(this)
@@ -227,8 +224,6 @@ actor RouterRegistry
     _sources(source_id) = source
     _source_ids(digestof source) = source_id
     _barrier_initiator.register_source(source, source_id)
-    //!@
-    _snapshot_initiator.register_source(source, source_id)
 
     if not _stop_the_world_in_process and _application_ready_to_work then
       source.unmute(_dummy_consumer)
@@ -241,9 +236,7 @@ actor RouterRegistry
       _sources.remove(source_id)?
       _source_ids.remove(digestof source)?
       _barrier_initiator.unregister_source(source, source_id)
-      //!@
-      // _snapshot_initiator.unregister_source(source, source_id)
-      _connections.register_disposable(source)
+       _connections.register_disposable(source)
       // _connections.notify_cluster_of_new_source(source_id)
     else
       Fail()

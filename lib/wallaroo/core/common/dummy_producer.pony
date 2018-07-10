@@ -78,5 +78,3 @@ actor DummyProducer is Producer
   fun ref snapshot_state(snapshot_id: SnapshotId) =>
     None
 
-  fun ref snapshot_complete() =>
-    None
