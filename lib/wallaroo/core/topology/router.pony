@@ -35,7 +35,7 @@ use "wallaroo_labs/collection_helpers"
 use "wallaroo_labs/equality"
 use "wallaroo_labs/mort"
 
-trait val Router
+trait val Router is (Hashable & Equatable[Router])
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
     producer_id: StepId, producer: Producer ref, i_msg_uid: MsgId,
     frac_ids: FractionalMessageId, latest_ts: U64, metrics_id: U16,
@@ -43,7 +43,7 @@ trait val Router
   fun routes(): Map[StepId, Consumer] val
   fun routes_not_in(router: Router): Map[StepId, Consumer] val
 
-class val EmptyRouter is Router
+primitive EmptyRouter is Router
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
     producer_id: StepId, producer: Producer ref, i_msg_uid: MsgId,
     frac_ids: FractionalMessageId, latest_ts: U64, metrics_id: U16,
@@ -56,6 +56,12 @@ class val EmptyRouter is Router
 
   fun routes_not_in(router: Router): Map[StepId, Consumer] val =>
     recover Map[StepId, Consumer] end
+
+  fun eq(that: box->Router): Bool =>
+    that is EmptyRouter
+
+  fun hash(): USize =>
+    0
 
 class val DirectRouter is Router
   let _target_id: StepId
@@ -107,13 +113,21 @@ class val DirectRouter is Router
     m(_target_id) = _target
     consume m
 
+  fun eq(that: box->Router): Bool =>
+    match that
+    | let dr: DirectRouter =>
+      (_target_id == dr._target_id) and (_target is dr._target)
+    else
+      false
+    end
+
+  fun hash(): USize =>
+    _target_id.hash() xor (digestof _target).hash()
+
 class val MultiRouter is Router
   let _routers: Array[Router] val
 
   new val create(routers: Array[Router] val) =>
-    ifdef debug then
-      Invariant(routers.size() > 1)
-    end
     _routers = routers
 
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
@@ -171,7 +185,38 @@ class val MultiRouter is Router
     end
     consume rs
 
-class val ProxyRouter is (Router & Equatable[ProxyRouter])
+  fun eq(that: box->Router): Bool =>
+    match that
+    | let mr: MultiRouter =>
+      try
+        let theirs = mr._routers
+        if _routers.size() != theirs.size() then return false end
+        var is_equal = true
+        for i in Range(0, _routers.size()) do
+          if _routers(i)? != theirs(i)? then is_equal = false end
+        end
+        is_equal
+      else
+        false
+      end
+    else
+      false
+    end
+
+  fun hash(): USize =>
+    try
+      var h = _routers(0)?.hash()
+      if _routers.size() > 1 then
+        for i in Range(1, _routers.size()) do
+          h = h xor _routers(i)?.hash()
+        end
+      end
+      h
+    else
+      0
+    end
+
+class val ProxyRouter is Router
   let _worker_name: String
   let _target: OutgoingBoundary
   let _target_proxy_address: ProxyAddress
@@ -256,10 +301,18 @@ class val ProxyRouter is (Router & Equatable[ProxyRouter])
   fun target_boundary(): OutgoingBoundary =>
     _target
 
-  fun eq(that: box->ProxyRouter): Bool =>
-    (_worker_name == that._worker_name) and
-      (_target is that._target) and
-      (_target_proxy_address == that._target_proxy_address)
+  fun eq(that: box->Router): Bool =>
+    match that
+    | let pr: ProxyRouter =>
+      (_worker_name == pr._worker_name) and
+        (_target is pr._target) and
+        (_target_proxy_address == pr._target_proxy_address)
+    else
+      false
+    end
+
+  fun hash(): USize =>
+    _target_proxy_address.hash()
 
 trait val TargetIdRouter is Equatable[TargetIdRouter]
   fun route_with_target_ids[D: Any val](target_ids: Array[StepId] val,
@@ -1002,7 +1055,7 @@ class val DataRouter is Equatable[DataRouter]
       consumer.report_status(code)
     end
 
-trait val PartitionRouter is (Router & Equatable[PartitionRouter])
+trait val PartitionRouter is Router
   fun state_name(): String
   fun local_map(): Map[StepId, Step] val
   fun update_route[K: (Hashable val & Equatable[K] val)](
@@ -1384,7 +1437,7 @@ class val LocalPartitionRouter[In: Any val,
     end
     consume digest
 
-  fun eq(that: box->PartitionRouter): Bool =>
+  fun eq(that: box->Router): Bool =>
     match that
     | let o: box->LocalPartitionRouter[In, Key, S] =>
       MapTagEquality[StepId, Step](_local_map, o._local_map) and
@@ -1419,6 +1472,9 @@ class val LocalPartitionRouter[In: Any val,
     else
       false
     end
+
+  fun hash(): USize =>
+    _state_name.hash()
 
 trait val PartitionRouterBlueprint
   fun build_router(worker_name: String,
@@ -1461,8 +1517,7 @@ class val LocalPartitionRouterBlueprint[In: Any val,
       recover val Map[StepId, Step] end,
       _step_ids, consume partition_routes, _partition_function)
 
-trait val StatelessPartitionRouter is (Router &
-  Equatable[StatelessPartitionRouter])
+trait val StatelessPartitionRouter is Router
   fun partition_id(): U128
   fun update_route(partition_id': U64, target: (Step | ProxyRouter)):
     StatelessPartitionRouter ?
@@ -1731,7 +1786,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     end
     consume digest
 
-  fun eq(that: box->StatelessPartitionRouter): Bool =>
+  fun eq(that: box->Router): Bool =>
     match that
     | let o: box->LocalStatelessPartitionRouter =>
         MapEquality[U64, U128](_step_ids, o._step_ids) and
@@ -1763,6 +1818,9 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     else
       false
     end
+
+  fun hash(): USize =>
+    _partition_id.hash()
 
 trait val StatelessPartitionRouterBlueprint
   fun build_router(worker_name: String,
