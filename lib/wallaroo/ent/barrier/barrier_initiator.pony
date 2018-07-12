@@ -14,6 +14,7 @@ use "collections"
 use "promises"
 use "wallaroo/core/common"
 use "wallaroo/core/initialization"
+use "wallaroo/core/invariant"
 use "wallaroo/core/messages"
 use "wallaroo/core/source"
 use "wallaroo/core/source/barrier_source"
@@ -274,7 +275,6 @@ actor BarrierInitiator is Initializable
       Fail()
     end
 
-    //!@ NEEDS WORK!
     if _barrier_source isnt None then
       try
         (_barrier_source as BarrierSource).initiate_barrier(barrier_token)
@@ -284,6 +284,10 @@ actor BarrierInitiator is Initializable
       @printf[I32]("!@ calling initiate_barrier at %s sources\n".cstring(), _sources.size().string().cstring())
       for s in _sources.values() do
         s.initiate_barrier(barrier_token)
+      end
+    else
+      ifdef debug then
+        Invariant(_sources.size() == 0)
       end
     end
     // See if we should finish early
