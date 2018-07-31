@@ -200,23 +200,6 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
             # Validation
             ############
             logging.debug('Begin validation phase...')
-            # Use initializer's outputs to validate topology is set up correctly
-            check_initializer = re.compile(r'([\w\d]+) worker topology')
-            stdout = cluster.runners[0].get_output()
-            try:
-                m = check_initializer.search(stdout)
-                assert(m is not None)
-                topo_type = m.group(1)
-                if topo_type.lower() == 'single':
-                    topo_type = 1
-                else:
-                    topo_type = int(topo_type)
-                assert(workers == topo_type)
-            except Exception as err:
-                print 'runner output'
-                print stdout
-                raise
-
             if validate_file:
                 validation_files = validate_file.split(',')
                 for sink, fp in zip(cluster.sinks, validation_files):

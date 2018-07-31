@@ -75,4 +75,8 @@ primitive PartitionedU64FramedHandler is FramedSourceHandler[Message]
     let u: Value = Bytes.to_u64(data(0)?, data(1)?, data(2)?, data(3)?,
       data(4)?, data(5)?, data(6)?, data(7)?)
     let k: Key = String.from_array(recover data.slice(8) end)
-    Message(k, u)
+    let m = Message(k, u)
+    ifdef debug then
+      @printf[I32]("Source decoded: %s\n".cstring(), m.string().cstring())
+    end
+    consume m
