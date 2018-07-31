@@ -198,7 +198,7 @@ class TCPReceiver(StoppableThread):
     """
     __base_name__ = 'TCPReceiver'
 
-    def __init__(self, host, port=0, max_connections=100, mode='framed',
+    def __init__(self, host, port=0, max_connections=1000, mode='framed',
                  header_fmt='>I'):
         """
         Listen on a (host, port) pair for up to max_connections connections.
@@ -573,6 +573,93 @@ class Sender(StoppableThread):
                          .format(len(self.batch)))
 
 
+class MultiSequenceGenerator(object):
+    """
+    A growable collection of sequence generators.
+    - Each new generator has its own partition
+    - Messages are emitted in a round-robin fashion over the generator list
+    - When a new generator joins, it takes over all new messages until it
+      catches up
+    - At stoppage time, all generators are allowed to reach the same final
+      value
+    """
+    def __init__(self):
+        self.seqs = [0]  # store the last value for each sequence
+        self.catch_up = []  # Store newly added sequences
+        self.last_idx = 0  # the idx of the last sequence sent
+        self.max_sent = 0  # the highest value we've sent from any sequence
+        self.stop_value = 0  # This is the final value that was sent on each partition
+
+    def format_value(self, value, partition):
+        return struct.pack('>IQ7s', 15, value, '{:07d}'.format(partition))
+
+    def _next_value_(self):
+        # go through catch up sequences first!
+        if self.catch_up:
+            # idx is always len(self.seqs)
+            idx = len(self.seqs)
+            # get next value for the first catch up seq
+            self.catch_up[0] += 1
+            val = self.catch_up[0]
+            # if val is equal to val of last sequence in self.seqs, move to
+            # self.seqs
+            if val == self.seqs[-1]:
+                self.seqs.append(self.catch_up.pop(0))
+            # return value and new partition
+            return (idx, val)
+
+        # normal operation
+        self.last_idx += 1
+        if self.last_idx > len(self.seqs) - 1:
+            self.last_idx = 0
+        self.seqs[self.last_idx] += 1
+        return (self.last_idx, self.seqs[self.last_idx])
+
+    def add_sequence(self):
+        if not self.stop_value:
+            logging.log(INFO2, "MultiSequenceGenerator: adding new sequence")
+            self.catch_up.append(0)
+
+    def stop(self):
+        logging.log(INFO2, "MultiSequenceGenerator: stop called")
+        # keep going until all sequences reach max_sent
+        self.stop_value = self.max_sent
+
+    def send(self, ignored_arg):
+        idx, val = self._next_value_()
+        if self.stop_value:
+            if val > self.max_sent:
+                # drop the last incremented value back down
+                self.seqs[self.last_idx] -= 1
+                logging.log(INFO2, "MultiSequenceGenerator: Stop condition "
+                    "reached. Final values are: {}, {}".format(
+                        self.seqs, self.catch_up))
+                self.throw()
+
+        if val > self.max_sent:
+            self.max_sent = val
+        return self.format_value(val, idx)
+
+    def throw(self, type=None, value=None, traceback=None):
+        raise StopIteration
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        return self.send(None)
+
+    def close(self):
+        """Raise GeneratorExit inside generator.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("generator ignored GeneratorExit")
+
+
 def sequence_generator(stop=1000, start=0, header_fmt='>I', partition=''):
     """
     Generate a sequence of integers, encoded as big-endian U64.
@@ -766,6 +853,11 @@ class Runner(threading.Thread):
             raise ValueError("Runner hasn't started yet.")
         return self.p.poll()
 
+    def returncode(self):
+        if self.p is None:
+            raise ValueError("Runner hasn't started yet.")
+        return self.p.returncode
+
     def get_output(self, start_from=0):
         self.file.flush()
         with open(self.file.name, 'rb') as ro:
@@ -881,10 +973,11 @@ def runners_output_format(runners, from_tail=0, filter_fn=lambda r: True):
       should return `True` if the runner's output is to be included.
       Default is to keep all outputs.
     """
-    outputs = [(r.name, '\n'.join(r.get_output().splitlines()[-from_tail:]))
+    outputs = [(r.name, r.returncode(),
+                '\n'.join(r.get_output().splitlines()[-from_tail:]))
                for r in runners if filter_fn(r)]
-    return '\n===\n'.join(('--- {0} ->\n\n{1}\n\n--- {0} <-'
-                           .format(t[0], t[1])
+    return '\n===\n'.join(('--- {0} ({1}) ->\n\n{2}\n\n--- {0} ({1}) <-'
+                           .format(t[0], t[1], t[2])
                            for t in outputs))
 
 
@@ -1460,6 +1553,9 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
                                                                  processed))
     except:
         logging.exception("Integration pipeline_test encountered an error")
+        outputs = runners_output_format(runners, 10, lambda r: r.returncode() != 0)
+        logging.info("The last 10 lines of each worker were:\n\n{}".format(
+            outputs))
         raise
     finally:
         logging.info("Doing final cleanup")
@@ -1480,6 +1576,8 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
             alive_names = ', '.join((r.name for r in alive))
             outputs = runners_output_format(runners)
             for a in alive:
+                logging.info("Runner {} is still alive. Sending SIGKILL."
+                    .format(a.name))
                 a.kill()
             raise PipelineTestError("Runners [{}] failed to exit cleanly after"
                                     " {} seconds.\n"
@@ -1487,6 +1585,20 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
                                     "\n===\n{}"
                                     .format(alive_names, runner_join_timeout,
                                             outputs))
+        # check for workes that exited with a non-0 return code
+        # note that workers killed in the previous step have code -15
+        bad_exit = []
+        for r in runners:
+            c = r.returncode()
+            if c != 0 and c != -15:
+                bad_exit.append(r)
+        if bad_exit:
+            for r in bad_exit:
+                logging.warn("Runner {} exited with return code {}"
+                    .format(r.name, r.returncode()))
+            outputs = runners_output_format(bad_exit, 0)
+            raise PipelineTestError("The following workers terminated with "
+                "a non-0 exit code:\n{}".format(outputs))
 
     # Return runner names and outputs if try block didn't have a return
     return_value = [(r.name, r.get_output()) for r in runners]
