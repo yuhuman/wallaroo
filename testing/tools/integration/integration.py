@@ -198,7 +198,7 @@ class TCPReceiver(StoppableThread):
     """
     __base_name__ = 'TCPReceiver'
 
-    def __init__(self, host, port=0, max_connections=100, mode='framed',
+    def __init__(self, host, port=0, max_connections=1000, mode='framed',
                  header_fmt='>I'):
         """
         Listen on a (host, port) pair for up to max_connections connections.
@@ -315,8 +315,6 @@ class MetricsStopper(StoppableThread):
                 continue
 
     def stop(self):
-        logging.debug('%s: stopping Metrics Receiver', self.name)
-        self.metrics.stop()
         super(MetricsStopper, self).stop()
 
 
@@ -367,9 +365,8 @@ class MetricsNotifier(StoppableThread):
             time.sleep(0.1)
 
     def stop(self):
-        logging.debug('%s: stopping Sink Receiver', self.name)
-        self.sink.stop()
-        super(SinkAwaitValue, self).stop()
+        super(MetricsNotifier, self).stop()
+
 
 class Sink(TCPReceiver):
     __base_name__ = 'Sink'
@@ -416,8 +413,6 @@ class SinkExpect(StoppableThread):
             time.sleep(0.1)
 
     def stop(self):
-        logging.debug('%s: stopping Sink Receiver', self.name)
-        self.sink.stop()
         super(SinkExpect, self).stop()
 
 
@@ -427,7 +422,7 @@ class SinkAwaitValue(StoppableThread):
     """
     __base_name__ = 'SinkAwaitValue'
 
-    def __init__(self, sink, values, timeout=30):
+    def __init__(self, sink, values, timeout=30, func=lambda x: x):
         super(SinkAwaitValue, self).__init__()
         self.sink = sink
         if isinstance(values, (list, tuple)):
@@ -438,6 +433,7 @@ class SinkAwaitValue(StoppableThread):
         self.name = self.__base_name__
         self.error = None
         self.position = 0
+        self.func = func
 
     def run(self):
         started = time.time()
@@ -446,7 +442,8 @@ class SinkAwaitValue(StoppableThread):
             if msgs and msgs > self.position:
                 while self.position < msgs:
                     for val in list(self.values):
-                        if self.sink.data[self.position] == val:
+                        sink_data = self.func(self.sink.data[self.position])
+                        if sink_data == val:
                             self.values.discard(val)
                             logging.debug("{} matched on value {}."
                                           .format(self.name,
@@ -468,8 +465,6 @@ class SinkAwaitValue(StoppableThread):
             time.sleep(0.1)
 
     def stop(self):
-        logging.debug('%s: stopping Sink Receiver', self.name)
-        self.sink.stop()
         super(SinkAwaitValue, self).stop()
 
 
@@ -507,6 +502,18 @@ class Sender(StoppableThread):
         self.error = None
         self._bytes_sent = 0
         self.reconnect = reconnect
+        self.pause_event = threading.Event()
+
+    def pause(self):
+        logging.debug("{}: Pausing".format(self.name))
+        self.pause_event.set()
+
+    def paused(self):
+        return self.pause_event.is_set()
+
+    def resume(self):
+        logging.debug("{}: Resuming".format(self.name))
+        self.pause_event.clear()
 
     def send(self, bs):
         self.sock.sendall(bs)
@@ -535,6 +542,11 @@ class Sender(StoppableThread):
                              .format(self.host, self.port))
                 self.sock.connect((self.host, self.port))
                 while not self.stopped():
+                    while self.paused():
+                        # make sure to empty the send buffer before
+                        #entering pause state!
+                        self.batch_send_final()
+                        time.sleep(0.001)
                     header = self.reader.read(self.header_length)
                     if not header:
                         self.maybe_stop()
@@ -566,11 +578,109 @@ class Sender(StoppableThread):
             self.stop()
 
     def stop(self):
-        logging.log(INFO2, "Sender received stop instruction.")
+        logging.log(INFO2, "{} received stop instruction.".format(self.name))
         super(Sender, self).stop()
         if self.batch:
-            logging.warn("Sender stopped, but send buffer size is {}"
-                         .format(len(self.batch)))
+            logging.warn("{}: stopped, but send buffer size is {}"
+                         .format(self.name, len(self.batch)))
+
+
+class NoNonzeroError(ValueError):
+    pass
+
+
+def first_nonzero_index(seq):
+    idx = 0
+    for item in seq:
+        if item == 0:
+            idx += 1
+        else:
+            return idx
+    else:
+        raise NoNonzeroError("No nonzero values found in list")
+
+
+class MultiSequenceGenerator(object):
+    """
+    A growable collection of sequence generators.
+    - Each new generator has its own partition
+    - Messages are emitted in a round-robin fashion over the generator list
+    - When a new generator joins, it takes over all new messages until it
+      catches up
+    - At stoppage time, all generators are allowed to reach the same final
+      value
+    """
+    def __init__(self, base_parts=1, base_value=0):
+        self._base_value = base_value
+        self.seqs = [self._base_value for x in range(base_parts)]
+        # self.seqs stores the last value sent for each sequence
+        self._idx = 0  # the idx of the last sequence sent
+        self._remaining = []
+
+    def format_value(self, value, partition):
+        return struct.pack('>IQ7s', 15, value, '{:07d}'.format(partition))
+
+    def _next_value_(self):
+        # Normal operation next value: round robin through the sets
+        if self._idx >= len(self.seqs):
+            self._idx = 0
+        self.seqs[self._idx] += 1
+        idx = self._idx
+        val = self.seqs[idx]
+        self._idx += 1
+        return (idx, val)
+
+    def _next_catchup_value(self):
+        # After stop() was called: all sets catch up to current max
+        try:
+            idx = first_nonzero_index(self._remaining)
+            self.seqs[idx] += 1
+            self._remaining[idx] -= 1
+            return (idx, self.seqs[idx])
+        except NoNonzeroError:
+            # reset self._remaining so it can be reused
+            self._remaining = []
+            logging.debug("MultiSequenceGenerator: Stop condition "
+                "reached. Final values are: {}".format(
+                    self.seqs))
+            self.throw()
+
+    def add_sequence(self):
+        if not self._remaining:
+            logging.debug("MultiSequenceGenerator: adding new sequence")
+            self.seqs.append(self._base_value)
+
+    def stop(self):
+        logging.info("MultiSequenceGenerator: stop called")
+        max_val = max(self.seqs)
+        self._remaining = [max_val - v for v in self.seqs]
+
+    def send(self, ignored_arg):
+        if self._remaining:
+            idx, val = self._next_catchup_value()
+        else:
+            idx, val = self._next_value_()
+
+        return self.format_value(val, idx)
+
+    def throw(self, type=None, value=None, traceback=None):
+        raise StopIteration
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        return self.send(None)
+
+    def close(self):
+        """Raise GeneratorExit inside generator.
+        """
+        try:
+            self.throw(GeneratorExit)
+        except (GeneratorExit, StopIteration):
+            pass
+        else:
+            raise RuntimeError("generator ignored GeneratorExit")
 
 
 def sequence_generator(stop=1000, start=0, header_fmt='>I', partition=''):
@@ -766,6 +876,11 @@ class Runner(threading.Thread):
             raise ValueError("Runner hasn't started yet.")
         return self.p.poll()
 
+    def returncode(self):
+        if self.p is None:
+            raise ValueError("Runner hasn't started yet.")
+        return self.p.returncode
+
     def get_output(self, start_from=0):
         self.file.flush()
         with open(self.file.name, 'rb') as ro:
@@ -881,10 +996,11 @@ def runners_output_format(runners, from_tail=0, filter_fn=lambda r: True):
       should return `True` if the runner's output is to be included.
       Default is to keep all outputs.
     """
-    outputs = [(r.name, '\n'.join(r.get_output().splitlines()[-from_tail:]))
+    outputs = [(r.name, r.returncode(),
+                '\n'.join(r.get_output().splitlines()[-from_tail:]))
                for r in runners if filter_fn(r)]
-    return '\n===\n'.join(('--- {0} ->\n\n{1}\n\n--- {0} <-'
-                           .format(t[0], t[1])
+    return '\n===\n'.join(('--- {0} ({1}) ->\n\n{2}\n\n--- {0} ({1}) <-'
+                           .format(t[0], t[1], t[2])
                            for t in outputs))
 
 
@@ -1460,6 +1576,9 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
                                                                  processed))
     except:
         logging.exception("Integration pipeline_test encountered an error")
+        outputs = runners_output_format(runners, 10, lambda r: r.returncode() != 0)
+        logging.info("The last 10 lines of each worker were:\n\n{}".format(
+            outputs))
         raise
     finally:
         logging.info("Doing final cleanup")
@@ -1480,6 +1599,8 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
             alive_names = ', '.join((r.name for r in alive))
             outputs = runners_output_format(runners)
             for a in alive:
+                logging.info("Runner {} is still alive. Sending SIGKILL."
+                    .format(a.name))
                 a.kill()
             raise PipelineTestError("Runners [{}] failed to exit cleanly after"
                                     " {} seconds.\n"
@@ -1487,6 +1608,20 @@ def pipeline_test(generator, expected, command, workers=1, sources=1,
                                     "\n===\n{}"
                                     .format(alive_names, runner_join_timeout,
                                             outputs))
+        # check for workes that exited with a non-0 return code
+        # note that workers killed in the previous step have code -15
+        bad_exit = []
+        for r in runners:
+            c = r.returncode()
+            if c != 0 and c != -15:
+                bad_exit.append(r)
+        if bad_exit:
+            for r in bad_exit:
+                logging.warn("Runner {} exited with return code {}"
+                    .format(r.name, r.returncode()))
+            outputs = runners_output_format(bad_exit, 0)
+            raise PipelineTestError("The following workers terminated with "
+                "a non-0 exit code:\n{}".format(outputs))
 
     # Return runner names and outputs if try block didn't have a return
     return_value = [(r.name, r.get_output()) for r in runners]

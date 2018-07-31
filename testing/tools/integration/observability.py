@@ -196,16 +196,20 @@ class ObservabilityNotifier(StoppableThread):
         self.period = period
 
     def run(self):
+        logging.debug("Starting observabilitynotifier loop")
         started = time.time()
         while not self.stopped():
             try:
+                logging.debug("Try query")
                 query_result = self.query_func(*self.query_args)
             except Exception as err:
+                logging.debug("Query failed")
                 # sleep and retry but only if timeout hasn't elapsed
                 if (time.time() - started) <= self.timeout:
                     time.sleep(self.period)
                     continue
                 else:  # Timeout has elapsed, return this error!
+                    logging.debug("ObservabilityNOtifier timed out")
                     self.error = ObservabilityQueryError(
                         "Query function '{}' has experienced an error:\n{}({})"
                         .format(self.query_func_name, type(err).__name__,
@@ -214,6 +218,7 @@ class ObservabilityNotifier(StoppableThread):
                     break
 
             # Run tests, collect results
+            logging.debug("ON running tests")
             errors = {}
             for t in self.tests:
                 try:
@@ -222,6 +227,7 @@ class ObservabilityNotifier(StoppableThread):
                     tb = traceback.format_exc()
                     errors[t] = (err, tb)
 
+            logging.debug("Checking errors")
             # If all result are error free, break
             if not errors:
                 self.stop()
@@ -229,6 +235,7 @@ class ObservabilityNotifier(StoppableThread):
 
             # Else if any result is not True, either wait for next cycle
             # or timeout.
+            logging.debug("checking timeout")
             if time.time() - started > self.timeout:
                 self.error = ObservabilityTimeoutError(
                     "Observability test timed out after {} seconds with the"
@@ -244,4 +251,5 @@ class ObservabilityNotifier(StoppableThread):
                 self.error.query_result = query_result
                 self.stop()
                 break
+            logging.debug("Continuing to next iteration")
             time.sleep(self.period)

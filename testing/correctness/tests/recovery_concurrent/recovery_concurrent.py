@@ -70,6 +70,7 @@ def wait_for_cluster_to_resume_processing(runners):
     for r in runners:
         if not r.is_alive():
             continue
+        logging.debug("Checking status for runner {}".format(r.name))
         obs = ObservabilityNotifier(cluster_status_query,
             r.external,
             tests=await_cluster_is_processing, timeout=10)
@@ -192,7 +193,7 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
 
             time.sleep(delay)
 
-            print("!@ !!!!!!!!!--Killing first worker--")
+            logging.info("!@ !!!!!!!!!--Killing first worker--")
 
             # crash the first batch
             first_killed = []
@@ -237,6 +238,8 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
 
             # wait until all live workers report as ready for processing
             wait_for_cluster_to_resume_processing(runners)
+            logging.info("second recovery complete")
+
             # resume sender
             sender.resume()
 
@@ -246,13 +249,19 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
             # Tell the multi-sequence-sender to stop
             msg.stop()
             # Then wait for the sender to finish sending
+            logging.info("sender join start")
             sender.join(30)
+            logging.info("sender join complete")
             if sender.error:
+                logging.error("There's a sender error!")
+                logging.exception(sender.error)
                 raise sender.error
             if sender.is_alive():
                 sender.stop()
                 raise TimeoutError('Sender did not complete in the expected '
                                    'period')
+
+            logging.info("Sender stopped successfully")
 
             # Validate all sender values caught up
             stop_value = max(msg.seqs)
@@ -264,7 +273,7 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
 
             await_values = []
             for part, val in enumerate(msg.seqs):
-                key = '{:07d}'.format(part + 1)
+                key = '{:07d}'.format(part)
                 data = '[{},{},{},{}]'.format(*[val-x for x in range(3,-1,-1)])
                 await_values.append((key, data))
 
