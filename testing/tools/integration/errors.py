@@ -14,7 +14,15 @@
 
 
 # Error classes
+class StopError(Exception):
+    pass
+
+
 class AutoscaleError(Exception):
+    pass
+
+
+class ClusterError(StopError):
     pass
 
 
@@ -23,10 +31,6 @@ class MigrationError(AutoscaleError):
 
 
 class DuplicateKeyError(MigrationError):
-    pass
-
-
-class StopError(Exception):
     pass
 
 
@@ -42,5 +46,5 @@ class PipelineTestError(Exception):
     pass
 
 
-class CrashedWorkerError(PipelineTestError):
+class CrashedWorkerError(StopError):
     pass

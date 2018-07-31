@@ -22,9 +22,12 @@ class StoppableThread(threading.Thread):
         super(StoppableThread, self).__init__()
         self.daemon = True
         self.stop_event = threading.Event()
+        self.error = None
 
-    def stop(self):
+    def stop(self, error=None):
         self.stop_event.set()
+        if error:
+            self.error = error
 
     def stopped(self):
         return self.stop_event.is_set()
