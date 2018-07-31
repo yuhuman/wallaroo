@@ -65,7 +65,6 @@ Alternatively, for a CLI style integration tester, you may use the
 
 from control import wait_for_cluster_to_resume_processing
 
-
 from cluster import (add_runner,
                      Cluster,
                      ClusterError,

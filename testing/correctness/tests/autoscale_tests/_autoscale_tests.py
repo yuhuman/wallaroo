@@ -20,7 +20,6 @@ from integration import (Cluster,
                          Sender)
 from integration.logger import set_logging
 
-
 from collections import Counter
 from itertools import cycle
 import json
