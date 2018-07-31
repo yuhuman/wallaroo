@@ -15,7 +15,7 @@
 from itertools import chain
 
 
-def confirm_migration(pre_partitions, post_partitions, workers):
+def validate_migration(pre_partitions, post_partitions, workers):
     """
     - Test that no "joining" workers are present in the pre set
     - Test that no "leaving" workers are present in the post set
