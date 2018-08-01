@@ -660,141 +660,9 @@ actor RouterRegistry
   fun ref clean_shutdown() =>
     _recovery_file_cleaner.clean_recovery_files()
 
-  //////////////////////
-  // JOINING WORKER
-  //////////////////////
-  be worker_join(conn: TCPConnection, worker: String,
-    worker_count: USize, local_topology: LocalTopology,
-    current_worker_count: USize)
-  =>
-    try
-      (_autoscale as Autoscale).worker_join(conn, worker, worker_count,
-        local_topology, current_worker_count)
-    else
-      Fail()
-    end
-
-  be connect_to_joining_workers(ws: Array[String] val, coordinator: String) =>
-    try
-      (_autoscale as Autoscale).connect_to_joining_workers(ws, coordinator)
-    else
-      Fail()
-    end
-
-  be joining_worker_initialized(worker: String) =>
-    try
-      (_autoscale as Autoscale).joining_worker_initialized(worker)
-    else
-      Fail()
-    end
-
-  fun inform_joining_worker(conn: TCPConnection, worker: String,
-    local_topology: LocalTopology)
-  =>
-    let state_blueprints =
-      recover iso Map[String, PartitionRouterBlueprint] end
-    for (w, r) in _partition_routers.pairs() do
-      state_blueprints(w) = r.blueprint()
-    end
-
-    let stateless_blueprints =
-      recover iso Map[U128, StatelessPartitionRouterBlueprint] end
-    for (id, r) in _stateless_partition_routers.pairs() do
-      stateless_blueprints(id) = r.blueprint()
-    end
-
-    let tidr_blueprints = recover iso Map[String, TargetIdRouterBlueprint] end
-    for (state_name, tidr) in _target_id_routers.pairs() do
-      tidr_blueprints(state_name) = tidr.blueprint()
-    end
-
-    _connections.inform_joining_worker(conn, worker, local_topology,
-      _initializer_name, consume state_blueprints,
-      consume stateless_blueprints, consume tidr_blueprints)
-
-  be inform_contacted_worker_of_initialization() =>
-    _inform_contacted_worker_of_initialization()
-
-  fun ref _inform_contacted_worker_of_initialization() =>
-    match _contacted_worker
-    | let cw: String =>
-      if (_data_channel_listeners.size() != 0) and
-         (_control_channel_listeners.size() != 0)
-      then
-        _connections.inform_contacted_worker_of_initialization(cw)
-      else
-        _waiting_to_finish_join = true
-      end
-    else
-      Fail()
-    end
-
-  be inform_worker_of_boundary_count(target_worker: String) =>
-    // There is one boundary per source plus the canonical boundary
-    let count = _sources.size() + 1
-    _connections.inform_worker_of_boundary_count(target_worker, count)
-
-  be reconnect_source_boundaries(target_worker: String) =>
-    for source in _sources.values() do
-      source.reconnect_boundary(target_worker)
-    end
-
-  /////////////////////
-  // EXTERNAL QUERIES
-  /////////////////////
-  be partition_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.partition_query_response(
-      _partition_routers, _stateless_partition_routers)
-    conn.writev(msg)
-
-  be partition_count_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.partition_count_query_response(
-      _partition_routers, _stateless_partition_routers)
-    conn.writev(msg)
-
-  be cluster_status_query_not_initialized(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.cluster_status_query_reponse_not_initialized()
-    conn.writev(msg)
-
-  be cluster_status_query(worker_names: Array[String] val,
-    conn: TCPConnection)
-  =>
-    let msg = ExternalMsgEncoder.cluster_status_query_response(
-      worker_names.size(), worker_names, _stop_the_world_in_process)
-    conn.writev(msg)
-
-  be source_ids_query(conn: TCPConnection) =>
-    let ids = recover iso Array[String] end
-    for s_id in _source_ids.values() do
-      ids.push(s_id.string())
-    end
-    let msg = ExternalMsgEncoder.source_ids_query_response(
-      consume ids)
-    conn.writev(msg)
-
-  be state_entity_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.state_entity_query_response(
-      _partition_routers)
-    conn.writev(msg)
-
-  be stateless_partition_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.stateless_partition_query_response(
-      _stateless_partition_routers)
-    conn.writev(msg)
-
-  be state_entity_count_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.state_entity_count_query_response(
-      _partition_routers)
-    conn.writev(msg)
-
-  be stateless_partition_count_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.stateless_partition_count_query_response(
-      _stateless_partition_routers)
-    conn.writev(msg)
-
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   // STOP THE WORLD
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   fun ref initiate_stop_the_world() =>
     _initiated_stop_the_world = true
     _stop_the_world_in_process = true
@@ -941,9 +809,88 @@ actor RouterRegistry
       end
     end
 
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
+  // JOINING WORKER
+  /////////////////////////////////////////////////////////////////////////////
+  be worker_join(conn: TCPConnection, worker: String,
+    worker_count: USize, local_topology: LocalTopology,
+    current_worker_count: USize)
+  =>
+    try
+      (_autoscale as Autoscale).worker_join(conn, worker, worker_count,
+        local_topology, current_worker_count)
+    else
+      Fail()
+    end
+
+  be connect_to_joining_workers(ws: Array[String] val, coordinator: String) =>
+    try
+      (_autoscale as Autoscale).connect_to_joining_workers(ws, coordinator)
+    else
+      Fail()
+    end
+
+  be joining_worker_initialized(worker: String) =>
+    try
+      (_autoscale as Autoscale).joining_worker_initialized(worker)
+    else
+      Fail()
+    end
+
+  fun inform_joining_worker(conn: TCPConnection, worker: String,
+    local_topology: LocalTopology)
+  =>
+    let state_blueprints =
+      recover iso Map[String, PartitionRouterBlueprint] end
+    for (w, r) in _partition_routers.pairs() do
+      state_blueprints(w) = r.blueprint()
+    end
+
+    let stateless_blueprints =
+      recover iso Map[U128, StatelessPartitionRouterBlueprint] end
+    for (id, r) in _stateless_partition_routers.pairs() do
+      stateless_blueprints(id) = r.blueprint()
+    end
+
+    let tidr_blueprints = recover iso Map[String, TargetIdRouterBlueprint] end
+    for (state_name, tidr) in _target_id_routers.pairs() do
+      tidr_blueprints(state_name) = tidr.blueprint()
+    end
+
+    _connections.inform_joining_worker(conn, worker, local_topology,
+      _initializer_name, consume state_blueprints,
+      consume stateless_blueprints, consume tidr_blueprints)
+
+  be inform_contacted_worker_of_initialization() =>
+    _inform_contacted_worker_of_initialization()
+
+  fun ref _inform_contacted_worker_of_initialization() =>
+    match _contacted_worker
+    | let cw: String =>
+      if (_data_channel_listeners.size() != 0) and
+         (_control_channel_listeners.size() != 0)
+      then
+        _connections.inform_contacted_worker_of_initialization(cw)
+      else
+        _waiting_to_finish_join = true
+      end
+    else
+      Fail()
+    end
+
+  be inform_worker_of_boundary_count(target_worker: String) =>
+    // There is one boundary per source plus the canonical boundary
+    let count = _sources.size() + 1
+    _connections.inform_worker_of_boundary_count(target_worker, count)
+
+  be reconnect_source_boundaries(target_worker: String) =>
+    for source in _sources.values() do
+      source.reconnect_boundary(target_worker)
+    end
+
+  /////////////////////////////////////////////////////////////////////////////
   // NEW WORKER PARTITION MIGRATION
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   be report_connected_to_joining_worker(connected_worker: String) =>
     try
       (_autoscale as Autoscale).worker_connected_to_joining_workers(
@@ -1188,9 +1135,9 @@ actor RouterRegistry
   fun ref add_to_step_waiting_list(step_id: RoutingId) =>
     _step_waiting_list.set(step_id)
 
-  /////////////////
-  // Shrink to Fit
-  /////////////////
+  /////////////////////////////////////////////////////////////////////////////
+  // SHRINK TO FIT
+  /////////////////////////////////////////////////////////////////////////////
   be initiate_shrink(remaining_workers: Array[String] val,
     leaving_workers: Array[String] val)
   =>
@@ -1403,9 +1350,9 @@ actor RouterRegistry
     _connections.request_cluster_unmute()
     _unmute_request(_worker_name)
 
-  ////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   // Step moved off this worker or new step added to another worker
-  ////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   fun ref move_stateful_step_to_proxy(id: RoutingId, step: Step,
     proxy_address: ProxyAddress, key: Key, state_name: String)
   =>
@@ -1457,9 +1404,9 @@ actor RouterRegistry
   //     Fail()
   //   end
 
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   // Step moved onto this worker
-  //////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////
   be receive_immigrant_step(subpartition: StateSubpartitions,
     runner_builder: RunnerBuilder, reporter: MetricsReporter iso,
     recovery_replayer: RecoveryReconnecter, msg: StepMigrationMsg)
@@ -1552,6 +1499,59 @@ actor RouterRegistry
       end
     end
     consume diff
+
+  /////////////////////////////////////////////////////////////////////////////
+  // EXTERNAL QUERIES
+  /////////////////////////////////////////////////////////////////////////////
+  be partition_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.partition_query_response(
+      _partition_routers, _stateless_partition_routers)
+    conn.writev(msg)
+
+  be partition_count_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.partition_count_query_response(
+      _partition_routers, _stateless_partition_routers)
+    conn.writev(msg)
+
+  be cluster_status_query_not_initialized(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.cluster_status_query_reponse_not_initialized()
+    conn.writev(msg)
+
+  be cluster_status_query(worker_names: Array[String] val,
+    conn: TCPConnection)
+  =>
+    let msg = ExternalMsgEncoder.cluster_status_query_response(
+      worker_names.size(), worker_names, _stop_the_world_in_process)
+    conn.writev(msg)
+
+  be source_ids_query(conn: TCPConnection) =>
+    let ids = recover iso Array[String] end
+    for s_id in _source_ids.values() do
+      ids.push(s_id.string())
+    end
+    let msg = ExternalMsgEncoder.source_ids_query_response(
+      consume ids)
+    conn.writev(msg)
+
+  be state_entity_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.state_entity_query_response(
+      _partition_routers)
+    conn.writev(msg)
+
+  be stateless_partition_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.stateless_partition_query_response(
+      _stateless_partition_routers)
+    conn.writev(msg)
+
+  be state_entity_count_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.state_entity_count_query_response(
+      _partition_routers)
+    conn.writev(msg)
+
+  be stateless_partition_count_query(conn: TCPConnection) =>
+    let msg = ExternalMsgEncoder.stateless_partition_count_query_response(
+      _stateless_partition_routers)
+    conn.writev(msg)
 
 /////////////////////////////////////////////////////////////////////////////
 // TODO: Replace using this with the badly named SetIs once we address a bug
