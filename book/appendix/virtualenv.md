@@ -88,7 +88,7 @@ To run a Wallaroo application with virtualenv, run it within an activated shell:
 
 ```bash
 source ENV/bin/activate
-export PYTHONPATH="$HOME/wallaroo-tutorial/wallaroo/machida:$HOME/wallaroo-tutorial/wallaroo/examples/python/celsius"
+export PYTHONPATH="$HOME/wallaroo-tutorial/wallaroo/machida/lib:$HOME/wallaroo-tutorial/wallaroo/examples/python/celsius"
 $HOME/wallaroo-tutorial/wallaroo/machida/build/machida --application-module celsius \
   --in 127.0.0.1:7000 --out 127.0.0.1:5555 --metrics 127.0.0.1:5001 \
   --control 127.0.0.1:6000 --data 127.0.0.1:6001 --name worker-name \

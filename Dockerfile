@@ -96,7 +96,7 @@ RUN make clean && \
 VOLUME /src/wallaroo
 
 ENV PATH /wallaroo-bin:/metrics_ui-src/metrics_reporter_ui/bin:$PATH
-ENV PYTHONPATH /src/wallaroo/machida:$PYTHONPATH
+ENV PYTHONPATH /src/wallaroo/machida/lib:$PYTHONPATH
 
 WORKDIR /src
 

@@ -64,7 +64,7 @@ Data Receiver will start up and receive data without creating any output. By def
 First, we will need to set up the `PYTHONPATH` environment variable. Machida needs to be able to find the `wallaroo` Python module, which is in a file called `wallaroo.py` in the `machida` directory. It also needs to be able to find the module that defines the application. In order to do that, set and export the `PYTHONPATH` environment variable like this:
 
 ```bash
-export PYTHONPATH="$HOME/wallaroo-tutorial/wallaroo/machida:$HOME/wallaroo-tutorial/wallaroo/examples/python/celsius"
+export PYTHONPATH="$HOME/wallaroo-tutorial/wallaroo/machida/lib:$HOME/wallaroo-tutorial/wallaroo/examples/python/celsius"
 ```
 
 Now that we have Machida set up to run the "Celsius to Fahrenheit" application, and the metrics UI and something it can send output to up and running, we can run the application itself by executing the following command:
