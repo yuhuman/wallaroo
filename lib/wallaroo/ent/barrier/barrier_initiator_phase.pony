@@ -120,16 +120,16 @@ class _BlockingBarrierInitiatorPhase is _BarrierInitiatorPhase
     if (barrier_token == _initial_token) or
       (barrier_token == _wait_for_token)
     then
+      @printf[I32]("!@ BlockPhase: Initiating barrier %s!\n".cstring(), barrier_token.string().cstring())
       _initiator.initiate_barrier(barrier_token, result_promise)
     else
+      @printf[I32]("!@ BlockPhase: Queuing barrier %s!\n".cstring(), barrier_token.string().cstring())
       _initiator.queue_barrier(barrier_token, result_promise)
     end
 
   fun ref barrier_complete(token: BarrierToken) =>
     if token == _wait_for_token then
       _initiator.next_token()
-    elseif token != _initial_token then
-      Fail()
     end
 
 class _RollbackBarrierInitiatorPhase is _BarrierInitiatorPhase
