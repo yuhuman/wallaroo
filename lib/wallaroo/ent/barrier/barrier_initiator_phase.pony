@@ -128,6 +128,8 @@ class _BlockingBarrierInitiatorPhase is _BarrierInitiatorPhase
   fun ref barrier_complete(token: BarrierToken) =>
     if token == _wait_for_token then
       _initiator.next_token()
+    elseif token != _initial_token then
+      Fail()
     end
 
 class _RollbackBarrierInitiatorPhase is _BarrierInitiatorPhase
