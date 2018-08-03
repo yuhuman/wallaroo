@@ -941,7 +941,8 @@ class val DataRouter is Equatable[DataRouter]
     keyed_step_ids: LocalStatePartitionIds val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
     route_ids_to_target_ids: Map[RouteId, RoutingId] val,
-    keys_to_route_ids: StatePartitionRouteIds val)
+    keys_to_route_ids: StatePartitionRouteIds val,
+    state_routing_ids: Map[StateName, RoutingId] val)
   =>
     _worker_name = worker
     _data_routes = data_routes
@@ -950,7 +951,7 @@ class val DataRouter is Equatable[DataRouter]
     _target_ids_to_route_ids = target_ids_to_route_ids
     _route_ids_to_target_ids = route_ids_to_target_ids
     _keys_to_route_ids = keys_to_route_ids
-    _state_routing_id = WorkerStateRoutingId(_worker_name)
+    _state_routing_ids = state_routing_ids
 
   fun size(): USize =>
     _data_routes.size()
@@ -1021,7 +1022,7 @@ class val DataRouter is Equatable[DataRouter]
       producer.queue_register_producer(input_id, output_id)
     end
 
-  fun unregister_producer(input_id: RoutingId, output_id: RoutingId,
+  fun unregister_producer(input_id: Rout6ingId, output_id: RoutingId,
     producer: DataReceiver ref)
   =>
 
