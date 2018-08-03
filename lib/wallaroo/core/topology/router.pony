@@ -1022,7 +1022,7 @@ class val DataRouter is Equatable[DataRouter]
       producer.queue_register_producer(input_id, output_id)
     end
 
-  fun unregister_producer(input_id: Rout6ingId, output_id: RoutingId,
+  fun unregister_producer(input_id: RoutingId, output_id: RoutingId,
     producer: DataReceiver ref)
   =>
 
