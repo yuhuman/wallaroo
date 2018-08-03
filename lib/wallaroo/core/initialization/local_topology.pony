@@ -824,7 +824,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         // by certain workers), we need a more general way to route things
         // like barriers to downstream state steps. To enable this, we create
         // a RoutingId for each (state name, worker name) pair.
-        let state_routing_ids = Map[String, Map[WorkerName, RoutingId] val]
+        let state_routing_ids = Map[StateName, Map[WorkerName, RoutingId] val]
 
         /////////
         // Initialize based on DAG
@@ -939,7 +939,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                       let next_state_routing_id = _routing_id_gen()
                       next_routing_ids_iso(w) = next_state_routing_id
                     end
-                    let next_routing_ids = consume next_routing_ids_iso
+                    let next_routing_ids = consume val next_routing_ids_iso
                     state_routing_ids(state_name) = next_routing_ids
                     t.update_state_map(state_name, state_map,
                       _metrics_conn, _event_log, _recovery_replayer, _auth,
@@ -1320,12 +1320,20 @@ actor LocalTopologyInitializer is LayoutInitializer
                   state_step_routers.insert_if_absent(state_name,
                     StateStepRouter.from_boundaries(_worker_name,
                       _outgoing_boundaries))?
+                  let next_routing_ids_iso =
+                    recover iso Map[WorkerName, RoutingId] end
+                  for w in t.worker_names.values() do
+                    let next_state_routing_id = _routing_id_gen()
+                    next_routing_ids_iso(w) = next_state_routing_id
+                  end
+                  let next_routing_ids = consume val next_routing_ids_iso
+                  state_routing_ids(state_name) = next_routing_ids
                   t.update_state_map(state_name, state_map,
                     _metrics_conn, _event_log, _recovery_replayer, _auth,
                     _outgoing_boundaries, _initializables,
                     data_routes_ref, keyed_data_routes_ref,
                     keyed_step_ids_ref, built_state_steps,
-                    _state_step_creator)?
+                    _state_step_creator, next_routing_ids)?
                 else
                   @printf[I32]("Failed to update state map\n".cstring())
                   error
@@ -1467,12 +1475,20 @@ actor LocalTopologyInitializer is LayoutInitializer
                 state_step_routers.insert_if_absent(state_name,
                   StateStepRouter.from_boundaries(_worker_name,
                     _outgoing_boundaries))?
+                let next_routing_ids_iso =
+                  recover iso Map[WorkerName, RoutingId] end
+                for w in t.worker_names.values() do
+                  let next_state_routing_id = _routing_id_gen()
+                  next_routing_ids_iso(w) = next_state_routing_id
+                end
+                let next_routing_ids = consume val next_routing_ids_iso
+                state_routing_ids(state_name) = next_routing_ids
                 t.update_state_map(state_name, state_map,
                   _metrics_conn, _event_log, _recovery_replayer, _auth,
                   _outgoing_boundaries, _initializables,
                   data_routes_ref, keyed_data_routes_ref,
                   keyed_step_ids_ref, built_state_steps,
-                  _state_step_creator)?
+                  _state_step_creator, next_routing_ids)?
               else
                 @printf[I32]("Failed to update state map\n".cstring())
                 error
@@ -1539,8 +1555,20 @@ actor LocalTopologyInitializer is LayoutInitializer
 
         let sendable_data_routes = consume val data_routes
 
+        let data_router_state_routing_ids =
+          recover iso Map[RoutingId, StateName] end
+
+        for (s_name, ws) in state_routing_ids.pairs() do
+          for (w, r_id) in ws.pairs() do
+            if w == _worker_name then
+              data_router_state_routing_ids(r_id) = s_name
+            end
+          end
+        end
+
         let data_router = DataRouter(_worker_name, sendable_data_routes,
-          keyed_data_routes_ref.clone(), keyed_step_ids_ref.clone())
+          keyed_data_routes_ref.clone(), keyed_step_ids_ref.clone(),
+          consume data_router_state_routing_ids)
         _router_registry.set_data_router(data_router)
 
         let state_runner_builders = recover iso Map[String, RunnerBuilder] end
@@ -1708,7 +1736,8 @@ actor LocalTopologyInitializer is LayoutInitializer
         // We have not yet been assigned any keys by the cluster at this
         // stage, so we use an empty map to represent that.
         let data_router = DataRouter(_worker_name, consume data_routes,
-          recover LocalStatePartitions end, recover LocalStatePartitionIds end)
+          recover LocalStatePartitions end, recover LocalStatePartitionIds end,
+          recover Map[RoutingId, StateName] end)
 
         let state_runner_builders = recover iso Map[String, RunnerBuilder] end
 

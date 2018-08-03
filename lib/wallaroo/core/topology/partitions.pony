@@ -159,7 +159,7 @@ trait val StateSubpartitions is Equatable[StateSubpartitions]
     keyed_step_ids: LocalStatePartitionIds,
     state_steps: Map[String, Array[Step]],
     state_step_creator: StateStepCreator,
-    state_routing_ids: Map[WorkerName, RoutingId]): PartitionRouter
+    state_routing_ids: Map[WorkerName, RoutingId] val): PartitionRouter
   fun update_key(key: Key, pa: ProxyAddress): StateSubpartitions ?
   fun add_worker_name(worker: String): StateSubpartitions
   fun runner_builder(): RunnerBuilder
@@ -200,7 +200,7 @@ class val KeyedStateSubpartitions[PIn: Any val, S: State ref] is
     keyed_step_ids: LocalStatePartitionIds,
     state_steps: Map[String, Array[Step]],
     state_step_creator: StateStepCreator,
-    state_routing_ids: Map[WorkerName, RoutingId]):
+    state_routing_ids: Map[WorkerName, RoutingId] val):
     LocalPartitionRouter[PIn, S] val
   =>
     let hashed_node_routes = recover trn Map[String, HashedProxyRouter] end

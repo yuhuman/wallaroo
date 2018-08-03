@@ -81,7 +81,8 @@ actor DataReceiver is (Producer & Rerouter)
     _state_step_creator = state_step_creator
     _state_routing_id = WorkerStateRoutingId(_worker_name)
     _router = DataRouter(_worker_name, recover Map[RoutingId, Consumer] end,
-      recover LocalStatePartitions end, recover LocalStatePartitionIds end)
+      recover LocalStatePartitions end, recover LocalStatePartitionIds end,
+      recover Map[RoutingId, StateName] end)
     if initialized then
       _phase = _NormalDataReceiverProcessingPhase(this)
     end

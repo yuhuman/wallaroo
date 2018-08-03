@@ -49,7 +49,8 @@ actor DataReceivers
     _state_step_creator = state_step_creator
     _data_router =
       DataRouter(_worker_name, recover Map[RoutingId, Consumer] end,
-        recover LocalStatePartitions end, recover LocalStatePartitionIds end)
+        recover LocalStatePartitions end, recover LocalStatePartitionIds end,
+        recover Map[RoutingId, StateName] end)
     if not is_recovering then
       _initialized = true
     end
