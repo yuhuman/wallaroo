@@ -935,6 +935,10 @@ class val DataRouter is Equatable[DataRouter]
     end
     _keys_to_route_ids = consume kid_map
 
+  //!@
+  fun ll() =>
+    @printf[I32]("!@ DataRouter: LocalStatePartitions size: %s\n".cstring(), _keyed_routes.size().string().cstring())
+
   new val with_route_ids(worker: String,
     data_routes: Map[RoutingId, Consumer] val,
     keyed_routes: LocalStatePartitions val,
@@ -1019,7 +1023,9 @@ class val DataRouter is Equatable[DataRouter]
     elseif _state_routing_ids.contains(output_id) then
       try
         let state_name = _state_routing_ids(output_id)?
+        @printf[I32]("!@ DataRouter: register_producer on LocalStatePartitions, which currently is of size %s\n".cstring(), _keyed_routes.size().string().cstring())
         _keyed_routes.register_producer(state_name, input_id, producer)
+        @printf[I32]("!@ DataRouter: success\n".cstring())
       else
         Unreachable()
       end
@@ -1204,6 +1210,7 @@ class val DataRouter is Equatable[DataRouter]
         Unreachable()
       end
     else
+      @printf[I32]("!@ Failed to route to routing_id %s\n".cstring(), target_step_id.string().cstring())
       Fail()
     end
 
