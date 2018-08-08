@@ -110,9 +110,12 @@ actor EventLog
       else
         DummyBackend(this)
       end
-    if _config.is_recovering then
-      _phase = _RecoveringEventLogPhase(this)
-    end
+    _phase =
+      if _config.is_recovering then
+        _RecoveringEventLogPhase(this)
+      else
+        _NormalEventLogPhase(this)
+      end
 
   be set_barrier_initiator(barrier_initiator: BarrierInitiator) =>
     _barrier_initiator = barrier_initiator
@@ -174,6 +177,9 @@ actor EventLog
       None
     end
 
+  be write_initial_snapshot_id(snapshot_id: SnapshotId) =>
+    _phase.write_initial_snapshot_id(snapshot_id)
+
   be write_snapshot_id(snapshot_id: SnapshotId) =>
     _phase.write_snapshot_id(snapshot_id)
 
@@ -193,8 +199,7 @@ actor EventLog
   be initiate_rollback(token: SnapshotRollbackBarrierToken,
     action: Promise[SnapshotRollbackBarrierToken])
   =>
-    _phase = _RollbackEventLogPhase(this, token, action,
-      _resilients.keys())
+    _phase = _RollbackEventLogPhase(this, token, action)
 
     // If we have no resilients on this worker for some reason, then we
     // should abort rollback early.
@@ -203,6 +208,9 @@ actor EventLog
     else
       _phase.complete_early()
     end
+
+  fun ref expect_rollback_count(count: USize) =>
+    _phase.expect_rollback_count(count)
 
   fun ref rollback_from_log_entry(resilient_id: RoutingId,
     payload: ByteSeq val)

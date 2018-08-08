@@ -291,6 +291,11 @@ actor Startup
         end
       end
 
+      //!@
+      if not event_log_dir_filepath.exists() then
+        Fail()
+      end
+
       _event_log = ifdef "resilience" then
         if _startup_options.log_rotation then
           EventLog(_startup_options.worker_name,
@@ -365,7 +370,8 @@ actor Startup
         connections, is_recovering)
 
       let recovery = Recovery(auth, _startup_options.worker_name,
-        event_log, recovery_reconnecter, snapshot_initiator, connections)
+        event_log, recovery_reconnecter, snapshot_initiator, connections,
+        router_registry)
 
       let local_topology_initializer =
         LocalTopologyInitializer(
@@ -551,7 +557,8 @@ actor Startup
         data_receivers, router_registry, connections)
 
       let recovery = Recovery(auth, _startup_options.worker_name,
-        event_log, recovery_reconnecter, snapshot_initiator, connections)
+        event_log, recovery_reconnecter, snapshot_initiator, connections,
+        router_registry)
 
       let local_topology_initializer =
         LocalTopologyInitializer(
@@ -657,11 +664,13 @@ actor Startup
 
   fun ref _set_recovery_file_names(auth: AmbientAuth) =>
     try
+      @printf[I32]("!@ resilience_dir: %s\n".cstring(), _startup_options.resilience_dir.cstring())
       _event_log_dir_filepath = FilePath(auth, _startup_options.resilience_dir)?
     else
       Fail()
     end
     _event_log_file_basename = _app_name + "-" + _startup_options.worker_name
+    @printf[I32]("!@ Startup: _event_log_file_basename: %s\n".cstring(), _event_log_file_basename.string().cstring())
     _event_log_file_suffix = ".evlog"
     _event_log_file = _startup_options.resilience_dir + "/" + _app_name + "-" +
       _startup_options.worker_name + ".evlog"

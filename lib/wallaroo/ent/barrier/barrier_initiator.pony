@@ -176,6 +176,14 @@ actor BarrierInitiator is Initializable
           _clear_barriers()
           _phase = _RollbackBarrierInitiatorPhase(this, srt)
         end
+      | let srrt: SnapshotRollbackResumeBarrierToken =>
+        // Check if this rollback token is higher priority than a current
+        // rollback token, in case one is being processed. If it's not, drop
+        // it.
+        if _phase.higher_priority(srrt) then
+          _clear_barriers()
+          _phase = _NormalBarrierInitiatorPhase(this)
+        end
       end
 
       _phase.initiate_barrier(barrier_token, result_promise)
@@ -291,6 +299,30 @@ actor BarrierInitiator is Initializable
     barrier_token: BarrierToken)
   =>
     // @printf[I32]("!@ remote_initiate_barrier called for %s\n".cstring(), barrier_token.string().cstring())
+
+    // We handle rollback barrier token as a special case. That's because
+    // in the presence of a rollback token, we need to cancel all other
+    // tokens in flight since we are rolling back to an earlier state of
+    // the system. On a successful match here, we transition to the
+    // rollback phase.
+    match barrier_token
+    | let srt: SnapshotRollbackBarrierToken =>
+      // Check if this rollback token is higher priority than a current
+      // rollback token, in case one is being processed. If it's not, drop
+      // it.
+      if _phase.higher_priority(srt) then
+        _clear_barriers()
+        _phase = _RollbackBarrierInitiatorPhase(this, srt)
+      end
+    | let srrt: SnapshotRollbackResumeBarrierToken =>
+      // Check if this rollback token is higher priority than a current
+      // rollback token, in case one is being processed. If it's not, drop
+      // it.
+      if _phase.higher_priority(srrt) then
+        _clear_barriers()
+        _phase = _NormalBarrierInitiatorPhase(this)
+      end
+    end
 
     let next_handler = PendingBarrierHandler(_worker_name, this,
       barrier_token, _sinks, _workers, EmptyBarrierResultPromise(),

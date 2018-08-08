@@ -22,11 +22,19 @@ trait _EventLogPhase
     _invalid_call()
     Fail()
 
+  fun ref write_initial_snapshot_id(snapshot_id: SnapshotId) =>
+    _invalid_call()
+    Fail()
+
   fun ref write_snapshot_id(snapshot_id: SnapshotId) =>
     _invalid_call()
     Fail()
 
   fun ref snapshot_id_written(snapshot_id: SnapshotId) =>
+    _invalid_call()
+    Fail()
+
+  fun ref expect_rollback_count(count: USize) =>
     _invalid_call()
     Fail()
 
@@ -50,6 +58,12 @@ class _NormalEventLogPhase is _EventLogPhase
 
   new create(event_log: EventLog ref) =>
     _event_log = event_log
+
+  fun ref write_initial_snapshot_id(snapshot_id: SnapshotId) =>
+    _event_log._write_snapshot_id(snapshot_id)
+
+  fun ref snapshot_id_written(snapshot_id: SnapshotId) =>
+    None
 
   fun name(): String => "_NormalEventLogPhase"
 
@@ -122,27 +136,31 @@ class _RollbackEventLogPhase is _EventLogPhase
   let _event_log: EventLog ref
   let _action: Promise[SnapshotRollbackBarrierToken]
   let _token: SnapshotRollbackBarrierToken
-  let _resilients_pending: SetIs[RoutingId] = _resilients_pending.create()
+  let _resilients_acked: SetIs[RoutingId] = _resilients_acked.create()
+
+  // !@ This indicates we need another phase
+  var _rollback_count: USize = 0
 
   new create(event_log: EventLog ref, token: SnapshotRollbackBarrierToken,
-    action: Promise[SnapshotRollbackBarrierToken],
-    resilients: Iterator[RoutingId])
+    action: Promise[SnapshotRollbackBarrierToken])
   =>
     _event_log = event_log
     _action = action
     _token = token
-    for r in resilients do
-      _resilients_pending.set(r)
-    end
 
   fun name(): String => "_RollbackEventLogPhase"
 
+  fun ref expect_rollback_count(count: USize) =>
+    _rollback_count = count
+
   fun ref ack_rollback(resilient_id: RoutingId) =>
+    @printf[I32]("!@ EventLogPhase: ack_rollback for %s\n".cstring(), resilient_id.string().cstring())
     ifdef debug then
-      Invariant(_resilients_pending.contains(resilient_id))
+      Invariant(not _resilients_acked.contains(resilient_id))
     end
-    _resilients_pending.unset(resilient_id)
-    if _resilients_pending.size() == 0 then
+    @printf[I32]("!@ resilients acked when ack received: %s\n".cstring(), _resilients_acked.size().string().cstring())
+    _resilients_acked.set(resilient_id)
+    if _resilients_acked.size() == _rollback_count then
       _complete()
     end
 

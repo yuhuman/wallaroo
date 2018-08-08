@@ -202,9 +202,53 @@ class val SnapshotRollbackBarrierToken is BarrierToken
     match that
     | let sbt: SnapshotRollbackBarrierToken =>
       id > sbt.id
+    | let srbt: SnapshotRollbackResumeBarrierToken =>
+      id > srbt.id
     else
-      false
+      // A Rollback token is greater than any non-rollback token since it
+      // always takes precedence.
+      true
     end
 
   fun string(): String =>
     "SnapshotRollbackBarrierToken(" + id.string() + ")"
+
+class val SnapshotRollbackResumeBarrierToken is BarrierToken
+  let id: SnapshotId
+
+  new val create(id': SnapshotId) =>
+    id = id'
+
+  fun eq(that: box->BarrierToken): Bool =>
+    match that
+    | let sbt: SnapshotRollbackResumeBarrierToken =>
+      id == sbt.id
+    else
+      false
+    end
+
+  fun hash(): USize =>
+    id.hash()
+
+  fun lt(that: box->BarrierToken): Bool =>
+    match that
+    | let sbt: SnapshotRollbackResumeBarrierToken =>
+      id < sbt.id
+    else
+      false
+    end
+
+  fun gt(that: box->BarrierToken): Bool =>
+    match that
+    | let srbt: SnapshotRollbackResumeBarrierToken =>
+      id > srbt.id
+    | let sbt: SnapshotRollbackBarrierToken =>
+      id >= sbt.id
+    else
+      // A Rollback token is greater than any non-rollback token since it
+      // always takes precedence.
+      true
+    end
+
+  fun string(): String =>
+    "SnapshotRollbackResumeBarrierToken(" + id.string() + ")"

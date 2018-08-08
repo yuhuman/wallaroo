@@ -493,9 +493,15 @@ primitive ChannelMsgEncoder
   =>
     _encode(EventLogAckRollbackMsg(token, sender), auth)?
 
-  fun resume_the_world(sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
+  fun resume_snapshot(sender: WorkerName, auth: AmbientAuth):
+    Array[ByteSeq] val ?
   =>
-    _encode(ResumeTheWorldMsg(sender), auth)?
+    _encode(ResumeSnapshotMsg(sender), auth)?
+
+  fun resume_processing(sender: String, auth: AmbientAuth):
+    Array[ByteSeq] val ?
+  =>
+    _encode(ResumeProcessingMsg(sender), auth)?
 
   fun register_producer(sender: String, source_id: RoutingId, target_id: RoutingId,
     auth: AmbientAuth): Array[ByteSeq] val ?
@@ -1303,7 +1309,13 @@ class val RollbackCompleteMsg is ChannelMsg
     token = token'
     sender = sender'
 
-class val ResumeTheWorldMsg is ChannelMsg
+class val ResumeSnapshotMsg is ChannelMsg
+  let sender: String
+
+  new val create(sender': String) =>
+    sender = sender'
+
+class val ResumeProcessingMsg is ChannelMsg
   let sender: String
 
   new val create(sender': String) =>
