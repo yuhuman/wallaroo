@@ -173,6 +173,7 @@ actor SnapshotInitiator is Initializable
 
   be initiate_rollback(recovery_action: Promise[SnapshotRollbackBarrierToken])
   =>
+    @printf[I32]("!@ !!!!SnapshotInitiator: initiate_rollback!!!!\n".cstring())
     if (_primary_worker == _worker_name) then
       if _current_snapshot_id == 0 then
         @printf[I32]("No snapshots were taken!\n".cstring())
@@ -202,7 +203,7 @@ actor SnapshotInitiator is Initializable
       _barrier_initiator.inject_barrier(token, barrier_action)
     else
       try
-        let msg = ChannelMsgEncoder.initiate_rollback(_auth)?
+        let msg = ChannelMsgEncoder.initiate_rollback(_worker_name, _auth)?
         _connections.send_control(_primary_worker, msg)
       else
         Fail()

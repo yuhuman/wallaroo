@@ -66,13 +66,17 @@ actor BarrierInitiator is Initializable
   var _primary_worker: String
 
   new create(auth: AmbientAuth, worker_name: String, connections: Connections,
-    primary_worker: String)
+    primary_worker: String, is_recovering: Bool = false)
   =>
     _auth = auth
     _worker_name = worker_name
     _connections = connections
     _primary_worker = primary_worker
-    _phase = _NormalBarrierInitiatorPhase(this)
+    if is_recovering then
+      _phase = _RecoveringBarrierInitiatorPhase(this)
+    else
+      _phase = _NormalBarrierInitiatorPhase(this)
+    end
 
   be application_begin_reporting(initializer: LocalTopologyInitializer) =>
     initializer.report_created(this)
@@ -232,8 +236,6 @@ actor BarrierInitiator is Initializable
       @printf[I32]("Initiating barrier protocol for %s.\n".cstring(),
         barrier_token.string().cstring())
     end
-    //!@
-    // _current_barrier_token = barrier_token
 
     let barrier_handler = PendingBarrierHandler(_worker_name, this,
       barrier_token, _sinks, _workers, result_promise

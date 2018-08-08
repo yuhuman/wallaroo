@@ -34,13 +34,15 @@ class val EventLogConfig
   let backend_file_length: (USize | None)
   let log_rotation: Bool
   let suffix: String
+  let is_recovering: Bool
 
   new val create(log_dir': (FilePath | AmbientAuth | None) = None,
     filename': (String val | None) = None,
     logging_batch_size': USize = 10,
     backend_file_length': (USize | None) = None,
     log_rotation': Bool = false,
-    suffix': String = ".evlog")
+    suffix': String = ".evlog",
+    is_recovering': Bool = false)
   =>
     filename = filename'
     log_dir = log_dir'
@@ -48,6 +50,7 @@ class val EventLogConfig
     backend_file_length = backend_file_length'
     log_rotation = log_rotation'
     suffix = suffix'
+    is_recovering = is_recovering'
 
 actor EventLog
   let _worker_name: WorkerName
@@ -107,6 +110,9 @@ actor EventLog
       else
         DummyBackend(this)
       end
+    if _config.is_recovering then
+      _phase = _RecoveringEventLogPhase(this)
+    end
 
   be set_barrier_initiator(barrier_initiator: BarrierInitiator) =>
     _barrier_initiator = barrier_initiator
@@ -132,12 +138,17 @@ actor EventLog
   // SNAPSHOT
   /////////////////
   be initiate_snapshot(snapshot_id: SnapshotId, action: Promise[SnapshotId]) =>
-    _phase = _SnapshotEventLogPhase(this, snapshot_id, action)
+    _phase.initiate_snapshot(snapshot_id, action, this)
 
   be snapshot_state(resilient_id: RoutingId, snapshot_id: SnapshotId,
     payload: Array[ByteSeq] val)
   =>
     _phase.snapshot_state(resilient_id, snapshot_id, payload)
+
+  fun ref _initiate_snapshot(snapshot_id: SnapshotId,
+    action: Promise[SnapshotId])
+  =>
+    _phase = _SnapshotEventLogPhase(this, snapshot_id, action)
 
   fun ref _snapshot_state(resilient_id: RoutingId, snapshot_id: SnapshotId,
     payload: Array[ByteSeq] val)

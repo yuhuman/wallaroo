@@ -99,14 +99,6 @@ actor Recovery
       _recovery_phase = _PrepareRollback(this)
       let action = Promise[SnapshotRollbackBarrierToken]
       action.next[None]({(token: SnapshotRollbackBarrierToken) =>
-        // Inform cluster we've initiated recovery
-        try
-          let msg = ChannelMsgEncoder.recovery_initiated(token, _worker_name,
-            _auth)?
-          _connections.send_control_to_cluster(msg)
-        else
-          Fail()
-        end
         _self.rollback_prep_complete(token)
       })
       _snapshot_initiator.initiate_rollback(action)
@@ -117,6 +109,15 @@ actor Recovery
   fun ref _rollback_prep_complete(token: SnapshotRollbackBarrierToken) =>
     ifdef "resilience" then
       @printf[I32]("|~~ - Recovery Phase: Rollback - ~~|\n".cstring())
+      // Inform cluster we've initiated recovery
+      try
+        let msg = ChannelMsgEncoder.recovery_initiated(token, _worker_name,
+          _auth)?
+        _connections.send_control_to_cluster(msg)
+      else
+        Fail()
+      end
+
       _recovery_phase = _Rollback(this, token, _workers)
       let action = Promise[SnapshotRollbackBarrierToken]
       action.next[None](recover this~rollback_complete(_worker_name) end)

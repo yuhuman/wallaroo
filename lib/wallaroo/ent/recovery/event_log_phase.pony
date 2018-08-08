@@ -11,27 +11,36 @@ use "wallaroo_labs/mort"
 trait _EventLogPhase
   fun name(): String
 
+  fun ref initiate_snapshot(snapshot_id: SnapshotId,
+    action: Promise[SnapshotId], event_log: EventLog ref)
+  =>
+    event_log._initiate_snapshot(snapshot_id, action)
+
   fun ref snapshot_state(resilient_id: RoutingId, snapshot_id: SnapshotId,
     payload: Array[ByteSeq] val)
   =>
     _invalid_call()
+    Fail()
 
   fun ref write_snapshot_id(snapshot_id: SnapshotId) =>
     _invalid_call()
+    Fail()
 
   fun ref snapshot_id_written(snapshot_id: SnapshotId) =>
     _invalid_call()
+    Fail()
 
   fun ref ack_rollback(resilient_id: RoutingId) =>
     _invalid_call()
+    Fail()
 
   fun ref complete_early() =>
     _invalid_call()
+    Fail()
 
   fun _invalid_call() =>
     @printf[I32]("Invalid call on event log phase %s\n".cstring(),
       name().cstring())
-    Fail()
 
 class _InitialEventLogPhase is _EventLogPhase
   fun name(): String => "_InitialEventLogPhase"
@@ -43,6 +52,26 @@ class _NormalEventLogPhase is _EventLogPhase
     _event_log = event_log
 
   fun name(): String => "_NormalEventLogPhase"
+
+class _RecoveringEventLogPhase is _EventLogPhase
+  let _event_log: EventLog ref
+
+  new create(event_log: EventLog ref) =>
+    _event_log = event_log
+
+  fun name(): String => "_RecoveringEventLogPhase"
+
+  fun ref initiate_snapshot(snapshot_id: SnapshotId,
+    action: Promise[SnapshotId], event_log: EventLog ref)
+  =>
+    @printf[I32]("EventLog: Recovering so ignoring initiate snapshot id %s\n"
+      .cstring(), snapshot_id.string().cstring())
+
+  fun ref snapshot_state(resilient_id: RoutingId, snapshot_id: SnapshotId,
+    payload: Array[ByteSeq] val)
+  =>
+    @printf[I32](("EventLog: Recovering so ignoring snapshot state for " +
+      "resilient %s\n").cstring(), resilient_id.string().cstring())
 
 class _SnapshotEventLogPhase is _EventLogPhase
   let _event_log: EventLog ref

@@ -477,7 +477,19 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
       | let m: RecoveryInitiatedMsg =>
         _recovery.recovery_initiated_at_worker(m.sender, m.token)
       | let m: InitiateRollbackMsg =>
-        _snapshot_initiator.initiate_snapshot()
+        let promise = Promise[SnapshotRollbackBarrierToken]
+        promise.next[None]({(t: SnapshotRollbackBarrierToken) =>
+          try
+            let msg = ChannelMsgEncoder.rollback_complete(t, _worker_name,
+              _auth)?
+            _connections.send_control(m.sender, msg)
+          else
+            Fail()
+          end
+        })
+        _snapshot_initiator.initiate_rollback(promise)
+      | let m: RollbackCompleteMsg =>
+        _recovery.rollback_prep_complete(m.token)
       | let m: EventLogInitiateRollbackMsg =>
         let promise = Promise[SnapshotRollbackBarrierToken]
         promise.next[None]({(t: SnapshotRollbackBarrierToken) =>

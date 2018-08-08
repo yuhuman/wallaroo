@@ -298,16 +298,19 @@ actor Startup
             _event_log_file_basename
             where backend_file_length' =
               _startup_options.event_log_file_length,
-            suffix' = _event_log_file_suffix, log_rotation' = true))
+            suffix' = _event_log_file_suffix, log_rotation' = true,
+            is_recovering' = is_recovering))
         else
           EventLog(_startup_options.worker_name,
             EventLogConfig(event_log_dir_filepath,
             _event_log_file_basename + _event_log_file_suffix
             where backend_file_length' =
-              _startup_options.event_log_file_length))
+              _startup_options.event_log_file_length,
+              is_recovering' = is_recovering))
         end
       else
-        EventLog(_startup_options.worker_name)
+        EventLog(_startup_options.worker_name,
+          EventLogConfig(where is_recovering' = is_recovering))
       end
       let event_log = _event_log as EventLog
 
@@ -323,7 +326,8 @@ actor Startup
       connections.register_disposable(this)
 
       let barrier_initiator = BarrierInitiator(auth,
-        _startup_options.worker_name, connections, initializer_name)
+        _startup_options.worker_name, connections, initializer_name,
+        is_recovering)
       connections.register_disposable(barrier_initiator)
       event_log.set_barrier_initiator(barrier_initiator)
 
@@ -661,6 +665,7 @@ actor Startup
     _event_log_file_suffix = ".evlog"
     _event_log_file = _startup_options.resilience_dir + "/" + _app_name + "-" +
       _startup_options.worker_name + ".evlog"
+    @printf[I32]("!@ Startup: _event_log_file: %s\n".cstring(), _event_log_file.string().cstring())
     _local_topology_file = _startup_options.resilience_dir + "/" + _app_name +
       "-" + _startup_options.worker_name + ".local-topology"
     _data_channel_file = _startup_options.resilience_dir + "/" + _app_name +

@@ -465,12 +465,23 @@ primitive ChannelMsgEncoder
   =>
     _encode(RecoveryInitiatedMsg(token, sender), auth)?
 
-  fun initiate_rollback(auth: AmbientAuth): Array[ByteSeq] val ? =>
+  fun initiate_rollback(sender: WorkerName, auth: AmbientAuth):
+    Array[ByteSeq] val ?
+  =>
     """
     Sent to the primary snapshot worker from a recovering worker to initiate
     rollback during rollback recovery phase.
     """
-    _encode(InitiateRollbackMsg, auth)?
+    _encode(InitiateRollbackMsg(sender), auth)?
+
+  fun rollback_complete(token: SnapshotRollbackBarrierToken,
+    sender: WorkerName, auth: AmbientAuth): Array[ByteSeq] val ?
+  =>
+    """
+    Sent from the primary snapshot worker to the recovering worker to indicate
+    that rollback is complete.
+    """
+    _encode(RollbackCompleteMsg(token, sender), auth)?
 
   fun event_log_initiate_rollback(token: SnapshotRollbackBarrierToken,
     sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
@@ -771,7 +782,7 @@ class val ReplayMsg is ChannelMsg
   new val create(db: Array[ByteSeq] val) =>
     data_bytes = db
 
-  fun data_msg(auth: AmbientAuth): DataMsg ? =>
+  fun msg(auth: AmbientAuth): (DataMsg | ForwardBarrierMsg) ? =>
     var size: USize = 0
     for bytes in data_bytes.values() do
       size = size + bytes.size()
@@ -788,6 +799,8 @@ class val ReplayMsg is ChannelMsg
     match ChannelMsgDecoder(consume buffer, auth)
     | let r: DataMsg =>
       r
+    | let fbm: ForwardBarrierMsg =>
+      fbm
     else
       @printf[I32]("Trouble reconstituting replayed data msg\n".cstring())
       error
@@ -1276,7 +1289,19 @@ class val EventLogAckRollbackMsg is ChannelMsg
     token = token'
     sender = sender'
 
-primitive InitiateRollbackMsg is ChannelMsg
+class val InitiateRollbackMsg is ChannelMsg
+  let sender: WorkerName
+
+  new val create(sender': WorkerName) =>
+    sender = sender'
+
+class val RollbackCompleteMsg is ChannelMsg
+  let token: SnapshotRollbackBarrierToken
+  let sender: WorkerName
+
+  new val create(token': SnapshotRollbackBarrierToken, sender': WorkerName) =>
+    token = token'
+    sender = sender'
 
 class val ResumeTheWorldMsg is ChannelMsg
   let sender: String
