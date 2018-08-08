@@ -46,7 +46,7 @@ import time
 
 def test_recovery_concurrent_pony():
     command = 'multi_partition_detector'
-    _test_recovery(command, base_workers=2, first=1, delay=30, second=1)
+    _test_recovery(command, base_workers=2, first=1, delay=10, second=1)
 
 
 def _test_recovery(command, base_workers=2, first=1, delay=1, second=0):
@@ -121,11 +121,14 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
             sender = Sender(host, input_ports[0], reader, batch_size=10,
                             interval=0.05)
             sender.start()
-            time.sleep(1)
 
             # bring partition count to (workers + first + second) * partition_multiplier
             for x in range(workers * partition_multiplier - 1):
                 msg.add_sequence()
+
+            time.sleep(delay)
+
+            print("!@ !!!!!!!!!--Killing first worker--")
 
             # crash the first batch
             first_killed = []
@@ -143,6 +146,8 @@ def _test_recovery_main(command, base_workers=2, first=1, delay=1, second=0):
 
             # wait an arbitrary amount of time: 1 second
             time.sleep(delay)
+
+            print("!@ !!!!!!!!!--Killing second worker--")
 
             # crash second batch
             second_killed = []
