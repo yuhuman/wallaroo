@@ -30,7 +30,7 @@ docker start mui
 In another shell, run Giles Receiver to listen for messages:
 
 ```bash
-../../../../giles/receiver/receiver --ponythreads=1 --ponynoblock \
+../../../../utils/data_receiver/data_receiver --ponythreads=1 --ponynoblock \
   --listen 127.0.0.1:7002
 ```
 

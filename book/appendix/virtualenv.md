@@ -96,7 +96,7 @@ $HOME/wallaroo-tutorial/wallaroo/machida/build/machida --application-module cels
   --ponynoblock
 ```
 
-Please be aware that you'll still need to setup a source and sink as well. We include a toolkit named Giles to assist in this. To learn more you can look at [Giles Receiver](/book/wallaroo-tools/giles-receiver.md) and [Giles Sender](/book/wallaroo-tools/giles-sender.md) for more detailed instructions on building and running Giles.
+Please be aware that you'll still need to setup a source and sink as well. We include a toolkit named Giles to assist in this. To learn more you can look at [data receiver](/book/wallaroo-tools/giles-receiver.md) and [Giles Sender](/book/wallaroo-tools/giles-sender.md) for more detailed instructions on building and running Giles.
 
 To run a sink for our example with Giles, run
 
