@@ -42,7 +42,7 @@ docker start mui
 1. Start a listener
 
 ```bash
-../../../giles/receiver/receiver --listen 127.0.0.1:7002 --no-write \
+../../../utils/data_receiver/data_receiver --listen 127.0.0.1:7002 --no-write \
   --ponynoblock --ponythreads=1
 ```
 

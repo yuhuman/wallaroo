@@ -102,7 +102,7 @@ cd ~/wallaroo-tutorial/wallaroo/utils/cluster_shutdown
 ./cluster_shutdown 127.0.0.1:5050
 ```
 
-You can shut down Giles Sender and Giles Receiver by pressing Ctrl-c from their respective shells.
+You can shut down Giles Sender and Data Receiver by pressing Ctrl-c from their respective shells.
 
 You can shut down the Metrics UI with the following command:
 

@@ -85,7 +85,7 @@ vagrant up
 
 * **Giles Sender**: supplies data to Wallaroo applications over TCP.
 
-* **Giles Receiver**: receives data from Wallaroo over TCP.
+* **Data Receiver**: receives data from Wallaroo over TCP.
 
 * **Cluster Shutdown tool**: notifies the cluster to shut down cleanly.
 

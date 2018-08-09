@@ -27,7 +27,7 @@ In a shell, start up the Metrics UI if you don't already have it running:
 docker start mui
 ```
 
-In another shell, run Giles Receiver to listen for messages:
+In another shell, run Data Receiver to listen for messages:
 
 ```bash
 ../../../../utils/data_receiver/data_receiver --ponythreads=1 --ponynoblock \

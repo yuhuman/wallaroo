@@ -18,7 +18,7 @@ Copyright 2017 The Wallaroo Authors.
 
 """
 Validator validates the received.txt file from a sequence_window run, as saved
-by giles-receiver.
+by `data_receiver`.
 
 It ensures that there are two types of sequences: mod2=1 and mod2=0, and that
 for each, the sequence windows are in ascending order from left to right, and

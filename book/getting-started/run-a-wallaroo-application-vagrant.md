@@ -5,11 +5,11 @@ In this section, we're going to run an example Wallaroo application. By the time
 There are a few Wallaroo support applications that you'll be interacting with for the first time:
 
 - Our Metrics UI allows you to monitor the performance and health of your applications.
-- Giles receiver is designed to capture TCP output from Wallaroo applications.
+- data_receiver is designed to capture TCP output from Wallaroo applications.
 - Giles sender is used to send test data into Wallaroo applications over TCP.
 - Machida, our program for running Wallaroo Python applications.
 
-You're going to set up our "Celsius to Fahrenheit" example application. Giles sender will be used to pump data into the application. Giles receiver will receive the output, and our Metrics UI will be running so you can observe the overall performance.
+You're going to set up our "Celsius to Fahrenheit" example application. Giles sender will be used to pump data into the application. data_receiver will receive the output, and our Metrics UI will be running so you can observe the overall performance.
 
 The Metrics UI process will be run in the background. The other three processes (receiver, sender, and Wallaroo) will run in the foreground.  We recommend that you run each process in a separate terminal.
 
@@ -48,16 +48,16 @@ If you need to start the UI after stopping it, run:
 metrics_reporter_ui start
 ```
 
-## Terminal 2, Run Giles Receiver
+## Terminal 2, Run data_receiver
 
-We'll use Giles Receiver to listen for data from our Wallaroo application.
+We'll use `data_receiver` to listen for data from our Wallaroo application.
 
 ```bash
-cd ~/wallaroo-tutorial/wallaroo/giles/receiver
-./receiver --listen 127.0.0.1:5555 --no-write --ponythreads=1 --ponynoblock
+cd ~/wallaroo-tutorial/wallaroo/utils/data_receiver/
+./data_receiver --listen 127.0.0.1:5555 --no-write --ponythreads=1 --ponynoblock
 ```
 
-You should see the `Listening for data` that indicates that Giles receiver is running.
+You should see the `Listening for data` that indicates that `data_receiver` is running.
 
 ## Terminal 3, Run the "Celsius to Fahrenheit" Application
 
@@ -133,7 +133,7 @@ cd ~/wallaroo-tutorial/wallaroo/utils/cluster_shutdown
 ./cluster_shutdown 127.0.0.1:5050
 ```
 
-You can shut down Giles Sender and Giles Receiver by pressing Ctrl-c from their respective shells.
+You can shut down Giles Sender and `data_receiver` by pressing Ctrl-c from their respective shells.
 
 You can shut down the Metrics UI with the following command:
 

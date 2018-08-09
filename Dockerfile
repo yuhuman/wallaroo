@@ -83,7 +83,6 @@ RUN make clean && \
     make target_cpu=x86-64 build-machida-all && \
     mkdir /wallaroo-bin && \
     cp giles/sender/sender /wallaroo-bin/sender && \
-    cp giles/receiver/receiver /wallaroo-bin/receiver && \
     cp machida/build/machida /wallaroo-bin/machida && \
     cp utils/cluster_shutdown/cluster_shutdown /wallaroo-bin/cluster_shutdown && \
     cp utils/data_receiver/data_receiver /wallaroo-bin/data_receiver && \
