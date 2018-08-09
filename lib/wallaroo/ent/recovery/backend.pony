@@ -139,7 +139,7 @@ class FileBackend is Backend
   fun ref start_rollback(snapshot_id: SnapshotId) =>
     if _filepath.exists() then
       @printf[I32](("RESILIENCE: Rolling back to snapshot %s from recovery " +
-        " log file: \n").cstring(), snapshot_id.string().cstring(),
+        "log file: \n").cstring(), snapshot_id.string().cstring(),
         _filepath.path.cstring())
 
       let r = Reader
@@ -155,14 +155,23 @@ class FileBackend is Backend
 
       var current_snapshot_id: SnapshotId = 0
       if _file.size() > 0 then
+        // Read the initial entry in the file, which should be a snapshot_id,
+        // skipping the is_watermark byte
+        _file.seek(1)
+        r.append(_file.read(8))
+        current_snapshot_id = try r.u64_be()? else Fail(); 0 end
+        @printf[I32]("!@ Found watermark %s\n".cstring(), current_snapshot_id.string().cstring())
+
         // We need to get to the data for the provided snapshot id. We'll
         // keep reading until we find the prior snapshot id, at which point
         // we're lined up with entries for this snapshot.
         while current_snapshot_id < (snapshot_id - 1) do
           @printf[I32]("!@ Looking for snapshot_id %s. Currently at %s\n".cstring(), snapshot_id.string().cstring(), current_snapshot_id.string().cstring())
+
           r.append(_file.read(1))
           let is_watermark = BoolConverter.u8_to_bool(
             try r.u8()? else Fail(); 0 end)
+
           if is_watermark then
             r.append(_file.read(8))
             current_snapshot_id = try r.u64_be()? else Fail(); 0 end

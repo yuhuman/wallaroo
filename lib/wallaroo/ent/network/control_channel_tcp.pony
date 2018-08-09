@@ -473,7 +473,8 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         _snapshot_initiator.event_log_snapshot_complete(m.sender,
           m.snapshot_id)
       | let m: CommitSnapshotIdMsg =>
-        _snapshot_initiator.commit_snapshot_id(m.snapshot_id, m.sender)
+        _snapshot_initiator.commit_snapshot_id(m.snapshot_id, m.rollback_id,
+          m.sender)
       | let m: RecoveryInitiatedMsg =>
         _recovery.recovery_initiated_at_worker(m.sender, m.token)
       | let m: InitiateRollbackMsg =>

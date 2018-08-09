@@ -204,7 +204,7 @@ actor EventLog
     // If we have no resilients on this worker for some reason, then we
     // should abort rollback early.
     if _resilients.size() > 0 then
-      _backend.start_rollback(token.id)
+      _backend.start_rollback(token.snapshot_id)
     else
       _phase.complete_early()
     end

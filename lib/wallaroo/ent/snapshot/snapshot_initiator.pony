@@ -39,6 +39,7 @@ actor SnapshotInitiator is Initializable
   let _barrier_initiator: BarrierInitiator
   var _current_snapshot_id: SnapshotId = 0
   var _last_complete_snapshot_id: SnapshotId = 0
+  var _last_rollback_id: RollbackId = 0
   let _connections: Connections
   let _snapshot_id_file: String
   let _source_ids: Map[USize, RoutingId] = _source_ids.create()
@@ -75,6 +76,7 @@ actor SnapshotInitiator is Initializable
       ifdef "resilience" then
         _event_log.write_initial_snapshot_id(_current_snapshot_id)
       end
+      _save_snapshot_id(_last_complete_snapshot_id, _last_rollback_id)
     end
 
   be application_begin_reporting(initializer: LocalTopologyInitializer) =>
@@ -141,8 +143,8 @@ actor SnapshotInitiator is Initializable
       let action = Promise[BarrierToken]
       action.next[None]({(t: BarrierToken) => _self.initiate_snapshot()})
       _barrier_initiator.inject_barrier(
-        SnapshotRollbackResumeBarrierToken(_last_complete_snapshot_id),
-        action)
+        SnapshotRollbackResumeBarrierToken(_last_rollback_id,
+          _last_complete_snapshot_id), action)
     else
       try
         let msg = ChannelMsgEncoder.resume_snapshot(_worker_name, _auth)?
@@ -184,12 +186,12 @@ actor SnapshotInitiator is Initializable
       | let st: SnapshotBarrierToken =>
         if st.id != _current_snapshot_id then Fail() end
         // @printf[I32]("!@ SnapshotInitiator: Snapshot %s is complete!\n".cstring(), st.id.string().cstring())
-        _save_snapshot_id(st.id)
+        _save_snapshot_id(st.id, _last_rollback_id)
         _last_complete_snapshot_id = st.id
 
         try
-          let msg = ChannelMsgEncoder.commit_snapshot_id(st.id, _worker_name,
-            _auth)?
+          let msg = ChannelMsgEncoder.commit_snapshot_id(st.id,
+            _last_rollback_id, _worker_name, _auth)?
           _connections.send_control_to_cluster(msg)
         else
           Fail()
@@ -222,17 +224,22 @@ actor SnapshotInitiator is Initializable
       _timers.dispose()
       _timers = Timers
 
+      let rollback_id = _last_rollback_id + 1
+      _last_rollback_id = rollback_id
+
       // TODO: To increase odds that snapshots were successfully flushed to
       // disk, we're using the second to last snapshot if one exists. We
       // should probably change this and address the question of whether a
       // snapshot was successfully written out directly.
-      let token = SnapshotRollbackBarrierToken(_last_complete_snapshot_id)
+      let token = SnapshotRollbackBarrierToken(rollback_id,
+        _last_complete_snapshot_id)
       _current_snapshot_id = _last_complete_snapshot_id
       let barrier_action = Promise[BarrierToken]
       barrier_action.next[None]({(t: BarrierToken) =>
         match t
         | let srbt: SnapshotRollbackBarrierToken =>
           recovery_action(srbt)
+          _self.rollback_complete(srbt.rollback_id)
         else
           Fail()
         end
@@ -247,24 +254,33 @@ actor SnapshotInitiator is Initializable
       end
     end
 
-  be commit_snapshot_id(snapshot_id: SnapshotId, sender: WorkerName) =>
+  be rollback_complete(rollback_id: RollbackId) =>
+    _last_rollback_id = rollback_id
+    _save_snapshot_id(_last_complete_snapshot_id, rollback_id)
+
+  be commit_snapshot_id(snapshot_id: SnapshotId, rollback_id: RollbackId,
+    sender: WorkerName)
+  =>
     if sender == _primary_worker then
       _current_snapshot_id = snapshot_id
       _last_complete_snapshot_id = snapshot_id
-      _save_snapshot_id(snapshot_id)
+      _last_rollback_id = rollback_id
+      _save_snapshot_id(snapshot_id, rollback_id)
     else
       @printf[I32](("CommitSnapshotIdMsg received from worker that is " +
         "not the primary for snapshots. Ignoring.\n").cstring())
     end
 
-  fun ref _save_snapshot_id(snapshot_id: SnapshotId) =>
+  fun ref _save_snapshot_id(snapshot_id: SnapshotId, rollback_id: RollbackId)
+  =>
     try
-      @printf[I32]("!@ Saving SnapshotId %s\n".cstring(), snapshot_id.string().cstring())
+      @printf[I32]("!@ Saving SnapshotId %s and RollbackId %s\n".cstring(), snapshot_id.string().cstring(), rollback_id.string().cstring())
       let filepath = FilePath(_auth, _snapshot_id_file)?
       // TODO: We'll need to rotate this file since it will grow rapidly.
       let file = File(filepath)
 
       _wb.u64_be(snapshot_id)
+      _wb.u64_be(rollback_id)
       file.writev(_wb.done())
       file.sync()
       file.dispose()
@@ -274,27 +290,30 @@ actor SnapshotInitiator is Initializable
     end
 
   fun ref _load_latest_snapshot_id() =>
+    @printf[I32]("!@ Loading _load_latest_snapshot_id\n".cstring())
     try
       let filepath = FilePath(_auth, _snapshot_id_file)?
       if filepath.exists() then
         let file = File(filepath)
         file.seek_end(0)
-        file.seek(-8)
+        file.seek(-16)
         let r = Reader
-        r.append(file.read(8))
+        r.append(file.read(16))
         //!@
-        let s_id = r.u64_be()?
-        @printf[I32]("!@ Loaded SnapshotId: %s\n".cstring(), s_id.string().cstring())
-        _current_snapshot_id = s_id
+        let snapshot_id = r.u64_be()?
+        @printf[I32]("!@ Loaded SnapshotId: %s\n".cstring(), snapshot_id.string().cstring())
+        _current_snapshot_id = snapshot_id
+        _last_complete_snapshot_id = snapshot_id
+        let rollback_id = r.u64_be()?
+        @printf[I32]("!@ Loaded RollbackId: %s\n".cstring(), rollback_id.string().cstring())
+        _last_rollback_id = rollback_id
       else
         @printf[I32]("No latest snapshot id in recovery file.\n".cstring())
-        _current_snapshot_id = 0
         //!@ What do we do here?
         Fail()
       end
     else
       @printf[I32]("Error reading snapshot id recovery file!".cstring())
-      _current_snapshot_id = 0
       //!@ What do we do here?
       Fail()
     end

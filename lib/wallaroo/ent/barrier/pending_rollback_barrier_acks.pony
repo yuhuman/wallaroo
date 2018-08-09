@@ -5,7 +5,7 @@ use "wallaroo/core/common"
 class PendingRollbackBarrierAcks
   // We only want to keep acks for the latest rollback token.
   var latest_rollback_token: SnapshotRollbackBarrierToken =
-    SnapshotRollbackBarrierToken(0)
+    SnapshotRollbackBarrierToken(0, 0)
 
   let barrier_acks: Array[(BarrierReceiver, SnapshotRollbackBarrierToken)] =
     barrier_acks.create()
