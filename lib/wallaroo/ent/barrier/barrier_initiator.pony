@@ -300,6 +300,10 @@ actor BarrierInitiator is Initializable
   =>
     // @printf[I32]("!@ remote_initiate_barrier called for %s\n".cstring(), barrier_token.string().cstring())
 
+    // If we're in recovery mode, we might need to collect some rollback
+    // acks before we receive a remote_initiate_barrier.
+    var pending_acks: (PendingRollbackBarrierAcks | None) = None
+
     // We handle rollback barrier token as a special case. That's because
     // in the presence of a rollback token, we need to cancel all other
     // tokens in flight since we are rolling back to an earlier state of
@@ -312,6 +316,8 @@ actor BarrierInitiator is Initializable
       // it.
       if _phase.higher_priority(srt) then
         _clear_barriers()
+        pending_acks = _phase.pending_rollback_barrier_acks()
+        @printf[I32]("!@ Switching to _RollbackBarrierInitiatorPhase for %s\n".cstring(), srt.string().cstring())
         _phase = _RollbackBarrierInitiatorPhase(this, srt)
       end
     | let srrt: SnapshotRollbackResumeBarrierToken =>
@@ -331,6 +337,12 @@ actor BarrierInitiator is Initializable
       _active_barriers.add_barrier(barrier_token, next_handler)?
     else
       Fail()
+    end
+
+    match pending_acks
+    | let pa: PendingRollbackBarrierAcks =>
+      @printf[I32]("!@ Flushing PendingRollbackBarrierAcks\n".cstring())
+      pa.flush(barrier_token, _active_barriers)
     end
 
     try
@@ -399,6 +411,7 @@ actor BarrierInitiator is Initializable
     Called by sinks when they have received barrier barriers on all
     their inputs.
     """
+    @printf[I32]("!@ BarrierInitiator: ack_barrier on %s\n".cstring(), _phase.name().cstring())
     _phase.ack_barrier(s, barrier_token, _active_barriers)
 
   be worker_ack_barrier(w: String, barrier_token: BarrierToken) =>

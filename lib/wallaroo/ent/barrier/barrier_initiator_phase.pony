@@ -8,6 +8,9 @@ use "wallaroo_labs/mort"
 trait _BarrierInitiatorPhase
   fun name(): String
 
+  fun ref pending_rollback_barrier_acks(): PendingRollbackBarrierAcks =>
+    PendingRollbackBarrierAcks
+
   fun ref initiate_barrier(barrier_token: BarrierToken,
     result_promise: BarrierResultPromise)
   =>
@@ -82,12 +85,17 @@ class _NormalBarrierInitiatorPhase is _BarrierInitiatorPhase
 
 class _RecoveringBarrierInitiatorPhase is _BarrierInitiatorPhase
   let _initiator: BarrierInitiator ref
+  let _pending_rollback_barrier_acks: PendingRollbackBarrierAcks =
+    _pending_rollback_barrier_acks.create()
 
   new create(initiator: BarrierInitiator ref) =>
     _initiator = initiator
 
   fun name(): String =>
     "_RecoveringBarrierInitiatorPhase"
+
+  fun ref pending_rollback_barrier_acks(): PendingRollbackBarrierAcks =>
+    _pending_rollback_barrier_acks
 
   fun ref initiate_barrier(barrier_token: BarrierToken,
     result_promise: BarrierResultPromise)
@@ -105,8 +113,7 @@ class _RecoveringBarrierInitiatorPhase is _BarrierInitiatorPhase
   =>
     match barrier_token
     | let rbt: SnapshotRollbackBarrierToken =>
-      //!@ Does this make sense in recovery mode?
-      active_barriers.ack_barrier(s, barrier_token)
+      _pending_rollback_barrier_acks.ack_barrier(s, rbt)
     else
       @printf[I32](("Barrier Initiator recovering so ignoring non-rollback " +
         "ack_barrier\n").cstring())
@@ -117,8 +124,7 @@ class _RecoveringBarrierInitiatorPhase is _BarrierInitiatorPhase
   =>
     match barrier_token
     | let rbt: SnapshotRollbackBarrierToken =>
-      //!@ Does this make sense in recovery mode?
-      active_barriers.worker_ack_barrier_start(w, barrier_token)
+      _pending_rollback_barrier_acks.worker_ack_barrier_start(w, rbt)
     else
       @printf[I32](("Barrier Initiator recovering so ignoring non-rollback " +
         "worker_ack_barrier_start\n").cstring())
@@ -129,8 +135,7 @@ class _RecoveringBarrierInitiatorPhase is _BarrierInitiatorPhase
   =>
     match barrier_token
     | let rbt: SnapshotRollbackBarrierToken =>
-      //!@ Does this make sense in recovery mode?
-      active_barriers.worker_ack_barrier(w, barrier_token)
+      _pending_rollback_barrier_acks.worker_ack_barrier(w, rbt)
     else
       @printf[I32](("Barrier Initiator recovering so ignoring non-rollback " +
         "worker_ack_barrier\n").cstring())
