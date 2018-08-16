@@ -13,7 +13,7 @@ machine. You'll therefore need:
 * Vagrant installed
 * A provisioned Wallaroo Release Vagrant box, as described in
   [PROVISION_VAGRANT.md](PROVISION_VAGRANT.md).
-* Valid AWS credentials in `~/.aws`
+* [Valid AWS credentials][aws_creds] in `~/.aws`
 
 ## Releasing the AMIs
 
@@ -43,7 +43,7 @@ This will `ssh` you into the running Wallaroo box.
 ### Build and publish AMI of your selected Wallaroo version
 
 ```bash
-./ami-release.sh <BRANCH> <TARGET_AMI_VERSION>
+./.release/ami-release.sh <BRANCH> <TARGET_AMI_VERSION>
 ```
 
 This will do the following:
@@ -67,12 +67,12 @@ Build 'amazon-ebs' finished.
 
 <LIST OF AMIS HERE>
 
-us-west-2: ami-1cf8d964
+us-west-2: ami-abcdef012
 ```
 
 ### Check that the most recent AMI is available as a Community AMI
 
-* Go to [The EC2 launch wizard](https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#LaunchInstanceWizard)
+* Go to [The EC2 launch wizard][ec2_launch_wizard]
 * Click **Community AMIs** (in the sidebar)
 * Type `wallaroo` in the Search bar
 * Check that the `WALLAROO_VERSION` you intended to build is available.
@@ -91,11 +91,14 @@ The build process comprises the following files:
 
 * [`ami-release.sh`](../../.release/ami-release.sh): This script is launched on
   the Vagrant box. It orchestrates the entire build process.
-* [`template.json`](../../.release/ami/template.json): The [Packer template](
-  https://www.packer.io/docs/templates/index.html) for the AMI
+* [`template.json`](../../.release/ami/template.json): The [Packer template][packer_template] for the AMI
 * [`ami/install_runtime_deps.sh`](../../.release/ami/install_runtime_deps.sh):
   This script is run on the EC2 instance. It is responsible for installing the
   runtime dependencies for `machida`.
 * [`regions`](../../.release/ami/regions): A text file listing the AWS regions
   where the public AMI will be available.
 
+
+[aws_creds]: https://developer.amazon.com/docs/smapi/set-up-credentials-for-an-amazon-web-services-account.html
+[ec2_launch_wizard]: https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#LaunchInstanceWizard
+[packer_template]: https://www.packer.io/docs/templates/index.html
