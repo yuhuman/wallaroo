@@ -59,6 +59,7 @@ COPY lib /wallaroo-src/lib/
 COPY LICENSE.md /wallaroo-src/
 COPY LIMITATIONS.md /wallaroo-src/
 COPY machida /wallaroo-src/machida/
+COPY machida3 /wallaroo-src/machida3/
 COPY Makefile /wallaroo-src/
 COPY monitoring_hub /wallaroo-src/monitoring_hub/
 COPY orchestration /wallaroo-src/orchesration/
@@ -85,16 +86,21 @@ RUN make clean && \
     make target_cpu=x86-64 build-giles-all && \
     make target_cpu=x86-64 build-utils-all && \
     make target_cpu=x86-64 build-machida-all && \
+    make target_cpu=x86-64 build-machida3-all && \
     mkdir /wallaroo-bin && \
     cp giles/sender/sender /wallaroo-bin/sender && \
     cp giles/receiver/receiver /wallaroo-bin/receiver && \
     cp machida/build/machida /wallaroo-bin/machida && \
+    cp machida3/build/machida3 /wallaroo-bin/machida3 && \
     cp utils/cluster_shutdown/cluster_shutdown /wallaroo-bin/cluster_shutdown && \
     cp utils/data_receiver/data_receiver /wallaroo-bin/data_receiver && \
     cp env-setup /wallaroo-bin && \
     make clean-machida-all && \
     make target_cpu=x86-64 build-machida-all resilience=on && \
     cp machida/build/machida /wallaroo-bin/machida-resilience && \
+    make clean-machida3-all && \
+    make target_cpu=x86-64 build-machida3-all resilience=on && \
+    cp machida3/build/machida3 /wallaroo-bin/machida3-resilience && \
     make clean
 
 VOLUME /src/wallaroo
