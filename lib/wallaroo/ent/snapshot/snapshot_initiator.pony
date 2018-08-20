@@ -244,7 +244,10 @@ actor SnapshotInitiator is Initializable
           Fail()
         end
       })
-      _barrier_initiator.inject_barrier(token, barrier_action)
+      let resume_token = SnapshotRollbackResumeBarrierToken(_last_rollback_id,
+        _last_complete_snapshot_id)
+      _barrier_initiator.inject_blocking_barrier(token, barrier_action,
+        resume_token)
     else
       try
         let msg = ChannelMsgEncoder.initiate_rollback(_worker_name, _auth)?
