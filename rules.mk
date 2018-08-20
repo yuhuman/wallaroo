@@ -46,6 +46,7 @@ integration_bin_path := $(integration_path)/integration
 wallaroo_lib :=  $(wallaroo_path)/lib
 wallaroo_python_path := $(wallaroo_path)/machida
 machida_bin_path := $(wallaroo_path)/machida/build
+machida3_bin_path := $(wallaroo_path)/machida3/build
 
 EMPTY :=
 SPACE := $(EMPTY) $(EMPTY)
@@ -53,7 +54,7 @@ SPACE := $(EMPTY) $(EMPTY)
 export PYTHONPATH = .:$(integration_path):$(wallaroo_python_path):$(SEQUENCE_WINDOW_PYTHON_PATH):$(TESTING_ALPHABET_PYTHON_PATH)
 ORIGNAL_PATH := $(PATH)
 export PATH = $(ORIGNAL_PATH):$(subst :$(SPACE),:,$(subst $(SPACE):,:,$(strip $(CUSTOM_PATH))))
-CUSTOM_PATH = $(integration_bin_path):$(machida_bin_path)
+CUSTOM_PATH = $(integration_bin_path):$(machida_bin_path):$(machida3_bin_path)
 
 # initialize default for some normal targets and variables
 build-wallarooroot-all :=
