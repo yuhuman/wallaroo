@@ -49,7 +49,7 @@ include $(rules_mk_path)
 
 cli_tests:
 	cd $(CLI_PATH) && \
-	python2 -m pytest --color=yes --tb=native \
+	python2 -m pytest -s --color=yes --tb=native \
 	 --verbose --exitfirst cli_tests.py \
 	$(pytest_exp)
 
