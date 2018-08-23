@@ -17,6 +17,7 @@ Copyright 2018 The Wallaroo Authors.
 */
 
 use "collections"
+use "promises"
 use "wallaroo/core/boundary"
 use "wallaroo/core/initialization"
 use "wallaroo/core/metrics"
@@ -108,41 +109,8 @@ actor StateStepCreator is Initializable
     to see if any of them can be handled by the new router.
     """
     if not _state_key_is_known(state_name, key) then
-      _state_key_known(state_name, key)
-
-      try
-        let reporter = MetricsReporter(_app_name, _worker_name, _metrics_conn)
-
-        let runner_builder = try
-          _state_runner_builders(state_name)?
-        else
-          @printf[I32]("Could not find runner_builder for state '%s'\n".cstring(),
-            state_name.cstring())
-          Fail()
-          error
-        end
-
-        let id = _routing_id_gen()
-        let target_id_router = _target_id_routers(state_name)?
-        let state_step = try
-          Step(_auth, runner_builder(
-            where event_log = _event_log, auth = _auth),
-            consume reporter, id, _event_log,
-            _recovery_replayer as RecoveryReconnecter,
-            _outgoing_boundaries, this
-            where target_id_router = target_id_router)
-        else
-          @printf[I32]("Missing things in StateStepCreator\n".cstring())
-          Fail()
-          error
-        end
-
-        _pending_steps(state_step) = (state_name, key, id)
-        state_step.quick_initialize(this)
-      else
-        @printf[I32]("Failed to create new step\n".cstring())
-        Fail()
-      end
+      let id = _routing_id_gen()
+      _create_state_step(state_name, key, id)
     end
 
   be set_router_registry(router_registry: RouterRegistry) =>
@@ -194,6 +162,58 @@ actor StateStepCreator is Initializable
     else
       @printf[I32](("StateStepCreator received report_ready_to_work from " +
         "an unknown step.\n").cstring())
+      Fail()
+    end
+
+  be rollback_state_steps(
+    rollback_keys: Map[StateName, Map[Key, RoutingId] val] val,
+    promise: Promise[None])
+  =>
+    _pending_steps.clear()
+    (let keys_to_add, let keys_to_remove) =
+      _keys_to_steps.key_diff(rollback_keys)
+
+    for (state_name, keys) in keys_to_add.pairs() do
+      for (key, r_id) in keys.pairs() do
+        _create_state_step(state_name, key, r_id)
+      end
+    end
+    for (state_name, keys) in keys_to_remove.pairs() do
+      for key in keys.values() do
+        try
+          let step = _keys_to_steps.remove_key(state_name, key)?
+          let step_id = _keys_to_step_ids.remove_key(state_name, key)?
+          (_router_registry as RouterRegistry)
+            .unregister_state_step(state_name, key, step_id, step)
+        else
+          Fail()
+        end
+      end
+    end
+    //!@ We should prove the updates are done before fulfilling
+    promise(None)
+
+  fun ref _create_state_step(state_name: StateName, key: Key, id: RoutingId) =>
+    _state_key_known(state_name, key)
+
+    try
+      let reporter = MetricsReporter(_app_name, _worker_name, _metrics_conn)
+
+      let runner_builder = _state_runner_builders(state_name)?
+
+      let target_id_router = _target_id_routers(state_name)?
+      let state_step =
+        Step(_auth, runner_builder(
+          where event_log = _event_log, auth = _auth),
+          consume reporter, id, _event_log,
+          _recovery_replayer as RecoveryReconnecter,
+          _outgoing_boundaries, this
+          where target_id_router = target_id_router)
+
+      _pending_steps(state_step) = (state_name, key, id)
+      state_step.quick_initialize(this)
+    else
+      @printf[I32]("Failed to create new step\n".cstring())
       Fail()
     end
 

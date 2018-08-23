@@ -3,6 +3,7 @@ use "buffered"
 use "collections"
 use "files"
 use "wallaroo/core/common"
+use "wallaroo/ent/snapshot"
 use "wallaroo_labs/mort"
 
 
@@ -10,10 +11,6 @@ primitive LocalKeysFileCommand
   fun add(): U8 => 0
   fun remove(): U8 => 1
   fun end_snapshot(): U8 => 2
-
-type _PendingAdd is (StateName, Key, RoutingId)
-type _PendingRemove is (StateName, Key)
-type _PendingEntry is (_PendingAdd | _PendingRemove)
 
 class LocalKeysFile
   // Entry format:
@@ -30,7 +27,6 @@ class LocalKeysFile
   let _file: File iso
   let _filepath: FilePath
   let _writer: Writer
-  let _pending: Array[_PendingEntry]
 
   new create(fpath: FilePath) =>
     _writer = Writer
@@ -38,28 +34,6 @@ class LocalKeysFile
     _file = recover iso File(_filepath) end
 
   fun ref add_key(state_name: StateName, k: Key, r_id: RoutingId) =>
-    _pending.push((state_name, k, r_id))
-
-  fun ref remove_key(state_name: StateName, k: Key) =>
-    _pending.push((state_name, k))
-
-  fun ref commit_snapshot(snapshot_id: SnapshotId) =>
-    for pe in _pending.values() do
-      _write_entry(pe)
-    end
-    _pending.clear()
-    _writer.u8(LocalKeysFileCommand.end_snapshot())
-    _writer.u64_be(snapshot_id)
-    _file.writev(_writer.done())
-
-  fun ref _write_entry(pe: _PendingEntry) =>
-    match pe
-    | let pa: _PendingAdd => _write_add_key(pa)
-    | let pr: _PendingRemove => _write_remove_key(pr)
-    end
-
-  fun ref _write_add_key(pa: _PendingAdd) =>
-    (let state_name, let k, let r_id) = pa
     _writer.u8(LocalKeysFileCommand.add())
     _writer.u32_be(state_name.size().u32())
     _writer.write(state_name)
@@ -68,8 +42,7 @@ class LocalKeysFile
     _writer.u128_be(r_id)
     _file.writev(_writer.done())
 
-  fun ref _write_remove_key(pr: _PendingRemove) =>
-    (let state_name, let k) = pr
+  fun ref remove_key(state_name: StateName, k: Key) =>
     _writer.u8(LocalKeysFileCommand.remove())
     _writer.u32_be(state_name.size().u32())
     _writer.write(state_name)
@@ -77,7 +50,12 @@ class LocalKeysFile
     _writer.write(k)
     _file.writev(_writer.done())
 
-  fun ref read_local_keys(snapshot_id: SnapshotId):
+  fun ref commit_snapshot(snapshot_id: SnapshotId) =>
+    _writer.u8(LocalKeysFileCommand.end_snapshot())
+    _writer.u64_be(snapshot_id)
+    _file.writev(_writer.done())
+
+  fun ref read_local_keys_and_truncate(snapshot_id: SnapshotId):
     Map[StateName, Map[Key, RoutingId] val] val
   =>
     let lks = Map[StateName, Map[Key, RoutingId]]
@@ -131,9 +109,9 @@ class LocalKeysFile
       end
     end
 
-    //!@ Truncate rest of file!
+    // Truncate rest of file since we are rolling back to an earlier
+    // snapshot.
     _file.set_length(_file.position())
-
 
     let lks_iso = recover iso Map[StateName, Map[Key, RoutingId] val] end
     for (s, keys) in lks.pairs() do

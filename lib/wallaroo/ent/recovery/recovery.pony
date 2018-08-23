@@ -26,10 +26,13 @@ actor Recovery
   Phases:
     1) _AwaitRecovering: Waiting for start_recovery() to be called
     2) _BoundariesReconnect: Wait for all boundaries to reconnect.
-    3) _PrepareRollback: Use barrier to ensure that all old data is cleared
+    3) _PrepareRollback: Have EventLog tell all resilients to prepare for
+       rollback.
+    4) _RollbackTopology: Roll back topology. Wait for acks from all workers.
+    5) _RollbackBarrier: Use barrier to ensure that all old data is cleared
        and all producers and consumers are ready to rollback state.
-    4) _Rollback: Rollback all state to last safe checkpoint.
-    5) _FinishedRecovering: Finished recovery
+    6) _Rollback: Rollback all state to last safe checkpoint.
+    7) _FinishedRecovering: Finished recovery
   """
   let _self: Recovery tag = this
   let _auth: AmbientAuth
@@ -44,6 +47,8 @@ actor Recovery
   let _connections: Connections
   let _router_registry: RouterRegistry
   var _initializer: (LocalTopologyInitializer | None) = None
+  // The snapshot id we are recovering to if we're recovering
+  var _snapshot_id: (SnapshotId | None) = None
 
   new create(auth: AmbientAuth, worker_name: WorkerName, event_log: EventLog,
     recovery_reconnecter: RecoveryReconnecter,
@@ -58,6 +63,9 @@ actor Recovery
     _connections = connections
     _router_registry = router_registry
 
+  be update_snapshot_id(s_id: SnapshotId) =>
+    _snapshot_id = s_id
+
   be start_recovery(initializer: LocalTopologyInitializer,
     workers: Array[WorkerName] val)
   =>
@@ -69,8 +77,14 @@ actor Recovery
   be recovery_reconnect_finished() =>
     _recovery_phase.recovery_reconnect_finished()
 
-  be rollback_prep_complete(token: SnapshotRollbackBarrierToken) =>
-    _recovery_phase.rollback_prep_complete(token)
+  be rollback_prep_complete() =>
+    _recovery_phase.rollback_prep_complete()
+
+  be worker_ack_topology_rollback(w: WorkerName, s_id: SnapshotId) =>
+    _recovery_phase.worker_ack_topology_rollback(w, s_id)
+
+  be rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
+    _recovery_phase.rollback_barrier_complete(token)
 
   be rollback_complete(worker: WorkerName,
     token: SnapshotRollbackBarrierToken)
@@ -93,18 +107,67 @@ actor Recovery
   fun ref _initiate_rollback() =>
     ifdef "resilience" then
       @printf[I32]("|~~ - Recovery Phase: Prepare Rollback - ~~|\n".cstring())
+      _event_log.prepare_for_rollback(this)
+
+      // Inform cluster to prepare for rollback
+      try
+        let msg = ChannelMsgEncoder.prepare_for_rollback(_worker_name, _auth)?
+        _connections.send_control_to_cluster(msg)
+      else
+        Fail()
+      end
 
       _recovery_phase = _PrepareRollback(this)
-      let action = Promise[SnapshotRollbackBarrierToken]
-      action.next[None]({(token: SnapshotRollbackBarrierToken) =>
-        _self.rollback_prep_complete(token)
-      })
-      _snapshot_initiator.initiate_rollback(action)
     else
       _recovery_complete()
     end
 
-  fun ref _rollback_prep_complete(token: SnapshotRollbackBarrierToken) =>
+  fun ref _rollback_prep_complete() =>
+    ifdef "resilience" then
+      @printf[I32]("|~~ - Recovery Phase: Rollback Topology Graph - ~~|\n"
+        .cstring())
+      try
+        let snapshot_id = _snapshot_id as SnapshotId
+        _recovery_phase = _RollbackTopology(this, snapshot_id, _workers)
+
+        //!@ Tell someone to start rolling back topology
+        let action = Promise[None]
+        action.next[None]({(n: None) =>
+          _self~worker_ack_topology_rollback(_worker_name, snapshot_id)
+        })
+        (_initializer as LocalTopologyInitializer)
+          .rollback_topology_graph(snapshot_id, action)
+
+        // Inform cluster to rollback topology graph
+        try
+          let msg = ChannelMsgEncoder.rollback_topology_graph(_worker_name,
+            snapshot_id, _auth)?
+          _connections.send_control_to_cluster(msg)
+        else
+          Fail()
+        end
+      else
+        Fail()
+      end
+    else
+      _recovery_complete()
+    end
+
+  fun ref _topology_rollback_complete() =>
+    ifdef "resilience" then
+      @printf[I32]("|~~ - Recovery Phase: Rollback Barrier - ~~|\n".cstring())
+      let action = Promise[SnapshotRollbackBarrierToken]
+      action.next[None]({(token: SnapshotRollbackBarrierToken) =>
+        _self.rollback_barrier_complete(token)
+      })
+      _snapshot_initiator.initiate_rollback(action)
+
+      _recovery_phase = _RollbackBarrier(this)
+    else
+      _recovery_complete()
+    end
+
+  fun ref _rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
     ifdef "resilience" then
       @printf[I32]("|~~ - Recovery Phase: Rollback - ~~|\n".cstring())
       // Inform cluster we've initiated recovery
