@@ -188,10 +188,12 @@ class ExternalSenderConnectNotifier is TCPConnectionNotify
           end
           _env.out.print(m.msg)
           conn.dispose()
-        | let m: ExternalSourceIdsQueryResponseMsg =>
-          _env.out.print("Source Ids:")
-          for s_id in m.source_ids.values() do
-            _env.out.print(". " + s_id.string())
+          | let m: ExternalSourceIdsQueryResponseMsg =>
+          if not _json then
+            // TODO: parse json and human-print ids
+            _env.out.print("Source Ids:" + m.msg)
+          else
+            _env.out.print(m.msg)
           end
           conn.dispose()
         | let m: ExternalStateEntityQueryResponseMsg =>

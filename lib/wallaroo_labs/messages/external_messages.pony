@@ -505,10 +505,10 @@ class val ExternalPartitionCountQueryResponseMsg is ExternalMsg
 primitive ExternalSourceIdsQueryMsg is ExternalMsg
 
 class val ExternalSourceIdsQueryResponseMsg is ExternalMsg
-  let source_ids: Array[String] val
+  let msg: String
 
-  new val create(m: Array[String] val) =>
-    source_ids = m
+  new val create(m: String val) =>
+    msg = m
 
 class val ExternalReportStatusMsg is ExternalMsg
   let code: String

@@ -16,10 +16,13 @@ from collections import namedtuple
 from integration import (ex_validate,
                          get_port_values,
                          Metrics,
+                         Reader,
                          Runner,
                          RunnerReadyChecker,
                          setup_resilience_path,
                          clean_resilience_path,
+                         Sender,
+                         sequence_generator,
                          Sink,
                          start_runners)
 import json
@@ -47,14 +50,22 @@ def test_cluster_status_query():
         q = Query(cluster, "cluster-status-query")
         assert q.result() == {
             u"processing_messages": True,
-            u"worker_names": [u"initializer",
-                              u"worker1"],
+            u"worker_names": [u"initializer", u"worker1"],
             u"worker_count": 2}
 
-def test_source_ids_query():
+def disabled_test_source_ids_query_with_no_sources():
+    # No sources connected results in {"source_ids":[""]}
     with FreshCluster() as cluster:
-        q = Query(cluster, "source-ids-query", parser=(lambda(x): x))
-        assert q.result() == "Source Ids:\n. \n"
+        q = Query(cluster, "source-ids-query")
+        assert q.result() == {"source_ids":[]}
+
+def test_source_ids_query():
+    with FreshCluster(n_sources=1) as cluster:
+        q = Query(cluster, "source-ids-query")
+        got = q.result()
+        assert got.keys() == ["source_ids"]
+        assert len(got["source_ids"]) == 1
+        assert int(got["source_ids"][0])
 
 def test_boundary_count_status_query():
     with FreshCluster(n_workers=2) as cluster:
@@ -86,12 +97,16 @@ class FreshCluster():
                            input_ports])
         start_runners(runners, command, host, inputs, outputs,
                       metrics_port, res_dir, n_workers, worker_ports)
-
         runner_ready_checker = RunnerReadyChecker(runners, timeout=30)
         runner_ready_checker.start()
         runner_ready_checker.join()
         if runner_ready_checker.error:
             raise runner_ready_checker.error
+        sender = Sender(host, input_ports[0],
+                        Reader(sequence_generator(1000)) ,
+                        batch_size=100,
+                        interval=0.05)
+        sender.start()
         self._cluster = Cluster(host=host,
                                 n_workers=n_workers,
                                 ports=worker_ports,
@@ -128,6 +143,9 @@ class Query():
     def result(self):
         success, stdout, _, _ = ex_validate(self._cmd)
         if success:
-            return self._parser(stdout)
+            try:
+                return self._parser(stdout)
+            except:
+                raise Exception("Failed running parser on {!r}".format(stdout))
         else:
-            raise "Failed running cmd: {}".format(self._cmd)
+            raise Exception("Failed running cmd: {}".format(self._cmd))

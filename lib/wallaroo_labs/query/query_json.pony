@@ -18,6 +18,7 @@ Copyright 2017 The Wallaroo Authors.
 
 use "collections"
 use "itertools"
+use "json"
 use "../messages"
 use "../mort"
 use "../../wallaroo/core/common"
@@ -473,5 +474,13 @@ primitive ClusterStatusQueryJsonDecoder
 
 primitive SourceIdsQueryJsonDecoder
   fun response(json: String): ExternalSourceIdsQueryResponseMsg =>
-    let source_ids = JsonDecoder.string_array(json)
-    ExternalSourceIdsQueryResponseMsg(source_ids)
+    let doc = JsonDoc
+    let obj = JsonObject
+    let arr = JsonArray
+    let original_hacky_things = JsonDecoder.string_array(json)
+    for x in original_hacky_things.values() do
+      arr.data.push(x)
+    end
+    obj.data("source_ids") = arr
+    doc.data = obj
+    ExternalSourceIdsQueryResponseMsg(doc.string())

@@ -37,10 +37,8 @@ CLI_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CUSTOM_PATH += :$(SEQUENCE_WINDOW_PATH):$(VALIDATOR_PATH):$(EXTERNAL_SENDER_PATH)
 CUSTOM_PYTHONPATH += $(SEQUENCE_WINDOW_PYTHON_PATH)
 
-build-testing-correctness-tests-cli_tests: build-testing-correctness-apps-alphabet
 build-testing-correctness-tests-cli_tests: build-machida
 build-testing-correctness-tests-cli_tests: build-testing-tools-external_sender
-build-testing-correctness-tests-cli_tests: build-utils-cluster_shrinker
 integration-tests-testing-correctness-tests-cli_tests: build-testing-correctness-tests-cli_tests
 integration-tests-testing-correctness-tests-cli_tests: cli_tests
 
