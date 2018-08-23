@@ -1672,7 +1672,7 @@ class val LocalPartitionRouter[In: Any val, S: State ref]
         router_registry.add_to_step_waiting_list(step_id)
         step.send_state(boundary, _state_name, key)
         router_registry.move_stateful_step_to_proxy(step_id, step,
-          ProxyAddress(target_worker, step_id), key, _state_name)
+          key, _state_name)
         @printf[I32](
           "^^Migrating step %s for key %s to outgoing boundary %s/%lx\n"
             .cstring(), step_id.string().cstring(), key.cstring(),

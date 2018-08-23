@@ -230,6 +230,22 @@ primitive ChannelMsgEncoder
   =>
     _encode(ReplayMsg(delivery_bytes), auth)?
 
+  fun request_recovery_info(worker_name: WorkerName, auth: AmbientAuth):
+    Array[ByteSeq] val ?
+  =>
+    """
+    This message is sent to the cluster when beginning recovery.
+    """
+    _encode(RequestRecoveryInfoMsg(worker_name), auth)?
+
+  fun inform_recovering_worker(worker_name: String, snapshot_id: SnapshotId,
+    auth: AmbientAuth): Array[ByteSeq] val ?
+  =>
+    """
+    This message is sent as a response to a RequestRecoveryInfo message.
+    """
+    _encode(InformRecoveringWorkerMsg(worker_name, snapshot_id), auth)?
+
   fun join_cluster(worker_name: String, worker_count: USize,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
@@ -252,8 +268,7 @@ primitive ChannelMsgEncoder
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
-    This message is sent as a response to a JoinCluster message. Currently it
-    only informs the new worker of metrics-related info
+    This message is sent as a response to a JoinCluster message.
     """
     _encode(InformJoiningWorkerMsg(worker_name, metric_app_name, l_topology,
       metric_host, metric_service, control_addrs, data_addrs, worker_names,
@@ -473,6 +488,30 @@ primitive ChannelMsgEncoder
     rollback during rollback recovery phase.
     """
     _encode(InitiateRollbackMsg(sender), auth)?
+
+  fun prepare_for_rollback(sender: WorkerName, auth: AmbientAuth):
+    Array[ByteSeq] val ?
+  =>
+    """
+    Sent to all workers in cluster by recovering worker.
+    """
+    _encode(PrepareForRollbackMsg(sender), auth)?
+
+  fun rollback_topology_graph(sender: WorkerName, snapshot_id: SnapshotId,
+    auth: AmbientAuth): Array[ByteSeq] val ?
+  =>
+    """
+    Sent to all workers in cluster by recovering worker.
+    """
+    _encode(RollbackTopologyGraphMsg(sender, snapshot_id), auth)?
+
+  fun ack_rollback_topology_graph(sender: WorkerName, snapshot_id: SnapshotId,
+    auth: AmbientAuth): Array[ByteSeq] val ?
+  =>
+    """
+    Sent to ack rolling back topology graph.
+    """
+    _encode(AckRollbackTopologyGraphMsg(sender, snapshot_id), auth)?
 
   fun rollback_complete(token: SnapshotRollbackBarrierToken,
     sender: WorkerName, auth: AmbientAuth): Array[ByteSeq] val ?
@@ -990,6 +1029,26 @@ class val ForwardKeyedMsg[D: Any val] is ReplayableDeliveryMsg
       error
     end
 
+class val RequestRecoveryInfoMsg is ChannelMsg
+  """
+  This message is sent to the cluster when beginning recovery.
+  """
+  let sender_name: String
+
+  new val create(sender: String) =>
+    sender_name = sender
+
+class val InformRecoveringWorkerMsg is ChannelMsg
+  """
+  This message is sent as a response to a RequestRecoveryInfo message.
+  """
+  let sender_name: String
+  let snapshot_id: SnapshotId
+
+  new val create(sender: String, s_id: SnapshotId) =>
+    sender_name = sender
+    snapshot_id = s_id
+
 class val JoinClusterMsg is ChannelMsg
   """
   This message is sent from a worker requesting to join a running cluster to
@@ -1004,8 +1063,7 @@ class val JoinClusterMsg is ChannelMsg
 
 class val InformJoiningWorkerMsg is ChannelMsg
   """
-  This message is sent as a response to a JoinCluster message. Currently it
-  only informs the new worker of metrics-related info
+  This message is sent as a response to a JoinCluster message.
   """
   let sender_name: String
   let local_topology: LocalTopology
@@ -1304,6 +1362,28 @@ class val InitiateRollbackMsg is ChannelMsg
 
   new val create(sender': WorkerName) =>
     sender = sender'
+
+class val PrepareForRollbackMsg is ChannelMsg
+  let sender: WorkerName
+
+  new val create(sender': WorkerName) =>
+    sender = sender'
+
+class val RollbackTopologyGraphMsg is ChannelMsg
+  let sender: WorkerName
+  let snapshot_id: SnapshotId
+
+  new val create(sender': WorkerName, s_id: SnapshotId) =>
+    sender = sender'
+    snapshot_id = s_id
+
+class val AckRollbackTopologyGraphMsg is ChannelMsg
+  let sender: WorkerName
+  let snapshot_id: SnapshotId
+
+  new val create(sender': WorkerName, s_id: SnapshotId) =>
+    sender = sender'
+    snapshot_id = s_id
 
 class val RollbackCompleteMsg is ChannelMsg
   let token: SnapshotRollbackBarrierToken

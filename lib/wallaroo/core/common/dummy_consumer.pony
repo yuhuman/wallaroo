@@ -88,6 +88,9 @@ actor DummyConsumer is Consumer
   fun ref snapshot_state(snapshot_id: SnapshotId) =>
     None
 
+  be prepare_for_rollback() =>
+    None
+
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     None
 
