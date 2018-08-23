@@ -287,6 +287,12 @@ actor BarrierSource is Source
     // _event_log.snapshot_state(_source_id, snapshot_id,
     //   recover val Array[ByteSeq] end)
 
+  be prepare_for_rollback() =>
+    """
+    There is nothing for a BarrierSource to rollback to.
+    """
+    None
+
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     """
     There is nothing for a BarrierSource to rollback to.

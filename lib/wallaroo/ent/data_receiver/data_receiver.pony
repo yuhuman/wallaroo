@@ -385,11 +385,17 @@ actor DataReceiver is (Producer & Rerouter)
     """
     None
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be prepare_for_rollback() =>
     """
     There is nothing for a DataReceiver to rollback to.
     """
     None
+
+  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+    """
+    There is nothing for a DataReceiver to rollback to.
+    """
+    event_log.ack_rollback(_id)
 
   /////////////////////////////////////////////////////////////////////////////
   // PRODUCER

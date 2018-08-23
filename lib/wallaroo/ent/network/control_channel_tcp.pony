@@ -283,6 +283,12 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         end
         _layout_initializer.create_data_channel_listener(m.workers,
           _d_host, _d_service)
+      | let m: RequestRecoveryInfoMsg =>
+        ifdef "trace" then
+          @printf[I32]("Received RequestRecoveryInfoMsg on Control Channel\n"
+            .cstring())
+        end
+        _snapshot_initiator.inform_recovering_worker(conn)
       | let m: JoinClusterMsg =>
         ifdef "trace" then
           @printf[I32]("Received JoinClusterMsg on Control Channel\n"
@@ -489,8 +495,27 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           end
         })
         _snapshot_initiator.initiate_rollback(promise)
+      | let m: PrepareForRollbackMsg =>
+        // !@ TODO: This promise can be used for acking. Right now it's a
+        // placeholder.
+        let promise = Promise[None]
+        _event_log.prepare_for_rollback(promise)
+      | let m: RollbackTopologyGraphMsg =>
+        let promise = Promise[None]
+        promise.next[None]({(n: None) =>
+          try
+            let msg = ChannelMsgEncoder.ack_rollback_topology_graph( _worker_name, m.snapshot_id, _auth)?
+            _connections.send_control(m.sender, msg)
+          else
+            Fail()
+          end
+        })
+        _layout_initializer.rollback_topology_graph(m.snapshot_id,
+          promise)
+      | let m: AckRollbackTopologyGraphMsg =>
+        _recovery.worker_ack_topology_rollback(m.sender, m.snapshot_id)
       | let m: RollbackCompleteMsg =>
-        _recovery.rollback_prep_complete(m.token)
+        _recovery.rollback_complete(m.sender, m.token)
       | let m: EventLogInitiateRollbackMsg =>
         let promise = Promise[SnapshotRollbackBarrierToken]
         promise.next[None]({(t: SnapshotRollbackBarrierToken) =>

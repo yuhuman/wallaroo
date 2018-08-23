@@ -193,6 +193,9 @@ actor TCPSource is Source
       r.application_initialized("TCPSource")
     end
 
+    // register resilient with event log
+    _event_log.register_resilient(_source_id, this)
+
     _mute()
 
   be update_router(router': Router) =>
@@ -373,6 +376,7 @@ actor TCPSource is Source
     """
     if not _disposed then
       _router_registry.unregister_source(this, _source_id)
+      _event_log.unregister_resilient(_source_id, this)
       _unregister_all_outputs()
       @printf[I32]("Shutting down TCPSource\n".cstring())
       for b in _outgoing_boundaries.values() do
@@ -431,7 +435,7 @@ actor TCPSource is Source
       match token
       | let srt: SnapshotRollbackBarrierToken =>
         @printf[I32]("!@ TCPSource clearing pending message store\n".cstring())
-        _pending_message_store.clear()
+        _prepare_for_rollback()
       end
 
       if not _pending_message_store.has_pending() then
@@ -470,6 +474,12 @@ actor TCPSource is Source
     @printf[I32]("!@ TCPSource %s calling EventLog.snapshot_state()\n".cstring(), _source_id.string().cstring())
     _event_log.snapshot_state(_source_id, snapshot_id,
       recover val Array[ByteSeq] end)
+
+  be prepare_for_rollback() =>
+    _prepare_for_rollback()
+
+  fun ref _prepare_for_rollback() =>
+    _pending_message_store.clear()
 
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     """

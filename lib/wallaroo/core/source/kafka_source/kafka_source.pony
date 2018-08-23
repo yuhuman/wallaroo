@@ -336,7 +336,7 @@ actor KafkaSource[In: Any val] is (Source & KafkaConsumer)
     if not _disposed then
       match token
       | let srt: SnapshotRollbackBarrierToken =>
-        _pending_message_store.clear()
+        _prepare_for_rollback()
       end
 
       if not _pending_message_store.has_pending() then
@@ -374,6 +374,12 @@ actor KafkaSource[In: Any val] is (Source & KafkaConsumer)
     _wb.i64_le(_last_flushed_offset)
     let payload = _wb.done()
     _event_log.snapshot_state(_source_id, snapshot_id, consume payload)
+
+  be prepare_for_rollback() =>
+    _prepare_for_rollback()
+
+  fun ref _prepare_for_rollback() =>
+    _pending_message_store.clear()
 
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     //!@ Rollback!
@@ -508,6 +514,7 @@ actor KafkaSource[In: Any val] is (Source & KafkaConsumer)
     if not _disposed then
       _unregister_all_outputs()
       _router_registry.unregister_source(this, _source_id)
+      _event_log.unregister_resilient(_source_id, this)
       for b in _outgoing_boundaries.values() do
         b.dispose()
       end

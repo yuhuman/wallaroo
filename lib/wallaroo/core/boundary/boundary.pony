@@ -547,6 +547,12 @@ actor OutgoingBoundary is Consumer
     """
     None
 
+  be prepare_for_rollback() =>
+    """
+    There is nothing for a Boundary to rollback to.
+    """
+    None
+
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     """
     There is nothing for a Boundary to rollback to.

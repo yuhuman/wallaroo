@@ -25,6 +25,7 @@ use "wallaroo_labs/mort"
 
 
 trait tag Resilient
+  be prepare_for_rollback()
   be rollback(payload: ByteSeq val, event_log: EventLog)
 
 class val EventLogConfig
@@ -197,6 +198,19 @@ actor EventLog
   /////////////////
   // ROLLBACK
   /////////////////
+  be prepare_for_rollback(origin: (Recovery | Promise[None])) =>
+    for r in _resilients.values() do
+      r.prepare_for_rollback()
+    end
+    match origin
+    | let r: Recovery =>
+      //!@ Currently we are immediately moving on without checking for other
+      //worker acks. Is this ok?
+      r.rollback_prep_complete()
+    | let p: Promise[None] =>
+      p(None)
+    end
+
   be initiate_rollback(token: SnapshotRollbackBarrierToken,
     action: Promise[SnapshotRollbackBarrierToken])
   =>
