@@ -567,9 +567,7 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
           if b_forwarder.higher_priority(srt)
           then
             @printf[I32]("!@ Step clearing based on %s\n".cstring(), barrier_token.string().cstring())
-            b_forwarder.clear()
-            _pending_message_store.clear()
-            _step_message_processor = NormalStepMessageProcessor(this)
+            _prepare_for_rollback()
           else
             @printf[I32]("!@ Step NOT clearing based on %s\n".cstring(), barrier_token.string().cstring())
           end
@@ -622,6 +620,18 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
     ifdef "resilience" then
       StepStateSnapshotter(_runner, _id, snapshot_id, _event_log)
     end
+
+  be prepare_for_rollback() =>
+    _prepare_for_rollback()
+
+  fun ref _prepare_for_rollback() =>
+    try
+      (_barrier_forwarder as BarrierStepForwarder).clear()
+    else
+      Fail()
+    end
+    _pending_message_store.clear()
+    _step_message_processor = NormalStepMessageProcessor(this)
 
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     ifdef "resilience" then
