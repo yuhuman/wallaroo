@@ -450,10 +450,10 @@ actor RouterRegistry
       source.add_boundary_builders(new_boundary_builders_sendable)
     end
 
-  be register_data_receiver(worker: String, dr: DataReceiver) =>
+  be register_data_receiver(worker: WorkerName, dr: DataReceiver) =>
     _data_receiver_map(worker) = dr
 
-  be register_state_step(step: Step, state_name: String, key: Key,
+  be register_state_step(step: Step, state_name: StateName, key: Key,
     step_id: RoutingId)
   =>
     @printf[I32]("!@ RouterRegistry: register_state_step, key: %s\n".cstring(), key.cstring())
@@ -464,6 +464,18 @@ actor RouterRegistry
       Fail()
     end
     _add_routes_to_state_step(step_id, step, key, state_name)
+
+  be unregister_state_step(state_name: StateName, key: Key, id: RoutingId,
+    step: Step)
+  =>
+    @printf[I32]("!@ RouterRegistry: unregister_state_step, key: %s\n".cstring(), key.cstring())
+    try
+      (_local_topology_initializer as LocalTopologyInitializer)
+        .unregister_state_step(state_name, key)
+    else
+      Fail()
+    end
+    move_stateful_step_to_proxy(id, step, key, state_name)
 
   fun _distribute_data_router() =>
     _data_receivers.update_data_router(_data_router)
@@ -835,6 +847,15 @@ actor RouterRegistry
         Fail()
       end
     end
+
+  /////////////////////////////////////////////////////////////////////////////
+  // ROLLBACK
+  /////////////////////////////////////////////////////////////////////////////
+  be rollback_state_steps(
+    rollback_keys: Map[StateName, Map[Key, RoutingId] val] val,
+    promise: Promise[None])
+  =>
+    _state_step_creator.rollback_state_steps(rollback_keys, promise)
 
   /////////////////////////////////////////////////////////////////////////////
   // JOINING WORKER
@@ -1378,15 +1399,15 @@ actor RouterRegistry
   /////////////////////////////////////////////////////////////////////////////
   // Step moved off this worker or new step added to another worker
   /////////////////////////////////////////////////////////////////////////////
-  fun ref move_stateful_step_to_proxy(id: RoutingId, step: Step,
-    proxy_address: ProxyAddress, key: Key, state_name: String)
+  fun ref move_stateful_step_to_proxy(id: RoutingId, step: Step, key: Key,
+    state_name: String)
   =>
     """
     Called when a stateful step has been migrated off this worker to another
     worker
     """
     _remove_all_routes_to_step(id, step)
-    _move_step_to_proxy(id, state_name, key, proxy_address)
+    _move_step_to_proxy(id, state_name, key)
 
   fun ref _remove_all_routes_to_step(id: RoutingId, step: Step) =>
     for source in _sources.values() do
@@ -1394,9 +1415,7 @@ actor RouterRegistry
     end
     _data_router.remove_routes_to_consumer(id, step)
 
-  fun ref _move_step_to_proxy(id: RoutingId, state_name: String, key: Key,
-    proxy_address: ProxyAddress)
-  =>
+  fun ref _move_step_to_proxy(id: RoutingId, state_name: String, key: Key) =>
     """
     Called when a step has been migrated off this worker to another worker
     """
@@ -1407,8 +1426,6 @@ actor RouterRegistry
     else
       Fail()
     end
-    //!@
-    // _add_proxy_to_target_id_router(id, proxy_address)
 
   be add_state_proxy(id: RoutingId, proxy_address: ProxyAddress, key: Key,
     state_name: String)

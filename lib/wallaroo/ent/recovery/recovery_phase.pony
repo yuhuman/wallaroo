@@ -40,7 +40,16 @@ trait _RecoveryPhase
     _invalid_call()
     Fail()
 
-  fun ref rollback_prep_complete(token: SnapshotRollbackBarrierToken) =>
+  fun ref rollback_prep_complete() =>
+    _invalid_call()
+    Fail()
+
+  fun ref worker_ack_topology_rollback(w: WorkerName, snapshot_id: SnapshotId)
+  =>
+    _invalid_call()
+    Fail()
+
+  fun ref rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
     _invalid_call()
     Fail()
 
@@ -107,8 +116,48 @@ class _PrepareRollback is _RecoveryPhase
 
   fun name(): String => "_PrepareRollback"
 
-  fun ref rollback_prep_complete(token: SnapshotRollbackBarrierToken) =>
-    _recovery._rollback_prep_complete(token)
+  fun ref rollback_prep_complete() =>
+    _recovery._rollback_prep_complete()
+
+class _RollbackTopology is _RecoveryPhase
+  let _recovery: Recovery ref
+  let _snapshot_id: SnapshotId
+  let _workers: Array[WorkerName] val
+  let _acked_workers: SetIs[WorkerName] = _acked_workers.create()
+
+  new create(recovery: Recovery ref, snapshot_id: SnapshotId,
+    workers: Array[WorkerName] val)
+  =>
+    _recovery = recovery
+    _workers = workers
+    _snapshot_id = snapshot_id
+
+  fun name(): String => "_RollbackTopology"
+
+  fun ref worker_ack_topology_rollback(w: WorkerName, snapshot_id: SnapshotId)
+  =>
+    //!@ Should we just ignore misses here (which indicate an overlapping
+    // recovery)?
+    if snapshot_id == _snapshot_id then
+      _acked_workers.set(w)
+      _check_completion()
+    end
+
+  fun ref _check_completion() =>
+    if _workers.size() == _acked_workers.size() then
+      _recovery._topology_rollback_complete()
+    end
+
+class _RollbackBarrier is _RecoveryPhase
+  let _recovery: Recovery ref
+
+  new create(recovery: Recovery ref) =>
+    _recovery = recovery
+
+  fun name(): String => "_RollbackBarrier"
+
+  fun ref rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
+    _recovery._rollback_barrier_complete(token)
 
 class _Rollback is _RecoveryPhase
   let _recovery: Recovery ref

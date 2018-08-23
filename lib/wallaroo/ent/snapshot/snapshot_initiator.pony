@@ -13,6 +13,7 @@ the License. You may obtain a copy of the License at
 use "buffered"
 use "collections"
 use "files"
+use "net"
 use "promises"
 use "time"
 use "wallaroo/core/common"
@@ -168,6 +169,15 @@ actor SnapshotInitiator is Initializable
         .cstring(), snapshot_id.string().cstring())
     end
     _phase.event_log_snapshot_complete(worker, snapshot_id)
+
+  be inform_recovering_worker(conn: TCPConnection) =>
+    try
+      let msg = ChannelMsgEncoder.inform_recovering_worker(_worker_name,
+        _last_complete_snapshot_id, _auth)?
+      conn.writev(msg)
+    else
+      Fail()
+    end
 
   fun ref event_log_write_snapshot_id(snapshot_id: SnapshotId) =>
     @printf[I32]("!@ SnapshotInitiator: event_log_write_snapshot_id()\n".cstring())

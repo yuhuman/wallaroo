@@ -412,10 +412,7 @@ actor KafkaSink is (Sink & KafkaClientManager & KafkaProducer)
       try
         let b_acker = _barrier_acker as BarrierSinkAcker
         if b_acker.higher_priority(srt) then
-          b_acker.clear()
-          _message_processor = NormalSinkMessageProcessor(this)
-          // TODO: If there is any recovery data associated with Sink, then
-          // rollback using it.
+          _prepare_for_rollback()
         end
       else
         Fail()
@@ -461,6 +458,17 @@ actor KafkaSink is (Sink & KafkaClientManager & KafkaProducer)
     """
     _event_log.snapshot_state(_sink_id, snapshot_id,
       recover val Array[ByteSeq] end)
+
+  be prepare_for_rollback() =>
+    _prepare_for_rollback()
+
+  fun ref _prepare_for_rollback() =>
+    try
+      (_barrier_acker as BarrierSinkAcker).clear()
+    else
+      Fail()
+    end
+    _message_processor = NormalSinkMessageProcessor(this)
 
   be rollback(payload: ByteSeq val, event_log: EventLog) =>
     """
