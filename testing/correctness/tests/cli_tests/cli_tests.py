@@ -25,6 +25,90 @@ from integration import (ex_validate,
 import json
 import tempfile
 
+def test_partition_query():
+    with FreshCluster() as cluster:
+        q = Query(cluster, "partition-query")
+        expected = {"state_partitions":
+                    {"Sequence Window": {"initializer": [0,1]}},
+                    "stateless_partitions":{}}
+        got = q.result()
+        assert expected.keys() == got.keys()
+        assert got["state_partitions"]["Sequence Window"].has_key("initializer")
+
+def test_partition_count_query():
+    with FreshCluster() as cluster:
+        q = Query(cluster, "partition-count-query")
+        assert q.result() == {
+            u"state_partitions": {u"Sequence Window": {u"initializer": 2}},
+            u"stateless_partitions": {}}
+
+def test_cluster_status_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "cluster-status-query")
+        assert q.result() == {
+            u"processing_messages": True,
+            u"worker_names": [u"initializer",
+                              u"worker1"],
+            u"worker_count": 2}
+
+def test_source_ids_query():
+    with FreshCluster() as cluster:
+        q = Query(cluster, "source-ids-query", parser=(lambda(x): x))
+        assert q.result() == "Source Ids:\n. \n"
+
+def test_boundary_count_status_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "boundary-count-status", parser=(lambda(x): x))
+        # TODO "What do I need to to do get data here?"
+        assert q.result() == ""
+
+class FreshCluster():
+    def __init__(self, host='127.0.0.1', n_sources=1, n_workers=1,
+                 command='machida --application-module sequence_window'):
+        res_dir = tempfile.mkdtemp(dir='/tmp/', prefix='res-data.')
+        setup_resilience_path(res_dir)
+        runners = []
+        sink = Sink(host)
+        sink.start()
+        metrics = Metrics(host)
+        metrics.start()
+
+        metrics_host, metrics_port = metrics.get_connection_info()
+        num_ports = n_sources + 3 * n_workers
+        ports = get_port_values(num=num_ports, host=host)
+        sink_host, sink_port = sink.get_connection_info()
+        outputs = '{}:{}'.format(sink_host, sink_port)
+        (input_ports, worker_ports) = (
+            ports[:n_sources],
+            [ports[n_sources:][i:i+3]
+             for i in xrange(0, len(ports[n_sources:]), 3)])
+        inputs = ','.join(['{}:{}'.format(host, p) for p in
+                           input_ports])
+        start_runners(runners, command, host, inputs, outputs,
+                      metrics_port, res_dir, n_workers, worker_ports)
+
+        runner_ready_checker = RunnerReadyChecker(runners, timeout=30)
+        runner_ready_checker.start()
+        runner_ready_checker.join()
+        if runner_ready_checker.error:
+            raise runner_ready_checker.error
+        self._cluster = Cluster(host=host,
+                                n_workers=n_workers,
+                                ports=worker_ports,
+                                runners=runners,
+                                sink=sink,
+                                metrics=metrics,
+                                res_dir=res_dir)
+
+    def __enter__(self):
+        return self._cluster
+
+    def __exit__(self, _type, _value, _traceback):
+        [ r.stop() for r in self._cluster.runners ]
+        self._cluster.sink.stop()
+        clean_resilience_path(self._cluster.res_dir)
+
+
 Cluster=namedtuple('Cluster', ['host',
                                'n_workers',
                                'ports',
@@ -33,62 +117,17 @@ Cluster=namedtuple('Cluster', ['host',
                                'metrics',
                                'res_dir'])
 
-def query(host, port, type):
-    cmd = "external_sender --json --external {}:{} --type {}"
-    return cmd.format(host, port, type)
+class Query():
+    def __init__(self, cluster, type, parser=json.loads):
+        host = cluster.host
+        port = cluster.ports[0][2]
+        cmd = "external_sender --json --external {}:{} --type {}"
+        self._cmd = cmd.format(host, port, type)
+        self._parser = parser
 
-def test_cluster_status_query():
-    cluster = given_cluster()
-    cmd = query(cluster.host, cluster.ports[0][2], "cluster-status-query")
-    try:
-        success, stdout, _, _ = ex_validate(cmd)
-        expected = {u"processing_messages": True,
-                    u"worker_names": [u"initializer"],
-                    u"worker_count": 1}
-        assert success
-        assert expected == json.loads(stdout)
-    finally:
-        teardown_cluster(cluster)
-
-
-
-def given_cluster(host='127.0.0.1', n_sources=1, n_workers=1,
-                  command='machida --application-module sequence_window'):
-    res_dir = tempfile.mkdtemp(dir='/tmp/', prefix='res-data.')
-    setup_resilience_path(res_dir)
-    runners = []
-    sink = Sink(host)
-    sink.start()
-    metrics = Metrics(host)
-    metrics.start()
-
-    metrics_host, metrics_port = metrics.get_connection_info()
-    num_ports = n_sources + 3 * n_workers
-    ports = get_port_values(num=num_ports, host=host)
-    sink_host, sink_port = sink.get_connection_info()
-    outputs = '{}:{}'.format(sink_host, sink_port)
-    (input_ports, worker_ports) = (
-        ports[:n_sources],
-        [ports[n_sources:][i:i+3]
-         for i in xrange(0, len(ports[n_sources:]), 3)])
-    inputs = ','.join(['{}:{}'.format(host, p) for p in
-                       input_ports])
-    start_runners(runners, command, host, inputs, outputs,
-                  metrics_port, res_dir, n_workers, worker_ports)
-
-    runner_ready_checker = RunnerReadyChecker(runners, timeout=30)
-    runner_ready_checker.start()
-    runner_ready_checker.join()
-    if runner_ready_checker.error:
-        raise runner_ready_checker.error
-    return Cluster(host=host,
-                   n_workers=n_workers,
-                   ports=worker_ports,
-                   runners=runners,
-                   sink=sink, metrics=metrics, res_dir=res_dir)
-
-
-def teardown_cluster(cluster):
-    [ r.stop() for r in cluster.runners ]
-    cluster.sink.stop()
-    clean_resilience_path(cluster.res_dir)
+    def result(self):
+        success, stdout, _, _ = ex_validate(self._cmd)
+        if success:
+            return self._parser(stdout)
+        else:
+            raise "Failed running cmd: {}".format(self._cmd)
