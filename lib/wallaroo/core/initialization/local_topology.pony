@@ -616,7 +616,14 @@ actor LocalTopologyInitializer is LayoutInitializer
   =>
     _target_id_router_blueprints(state_name) = target_id_router.blueprint()
 
+  be rollback_topology_graph(snapshot_id: SnapshotId, action: Promise[None])
+  =>
+    let local_keys = _local_keys_file.read_local_keys_and_truncate(
+      snapshot_id)
+    _router_registry.rollback_state_steps(local_keys, action)
+
   be recover_and_initialize(ws: Array[String] val,
+    target_snapshot_id: SnapshotId,
     cluster_initializer: (ClusterInitializer | None) = None)
   =>
     _recovering = true
@@ -723,8 +730,17 @@ actor LocalTopologyInitializer is LayoutInitializer
     end
 
   be initialize(cluster_initializer: (ClusterInitializer | None) = None,
-    recovering: Bool = false)
+    snapshot_target: (SnapshotId | None) = None)
   =>
+    _recovering =
+      match snapshot_target
+      | let id: SnapshotId =>
+        _recovery.update_snapshot_id(id)
+        true
+      else
+        false
+      end
+
     if _topology_initialized then
       ifdef debug then
         // Currently, recovery in a single worker cluster is a special case.
@@ -740,8 +756,6 @@ actor LocalTopologyInitializer is LayoutInitializer
       end
       return
     end
-
-    _recovering = recovering
 
     if _is_joining then
       _initialize_joining_worker()
@@ -811,9 +825,13 @@ actor LocalTopologyInitializer is LayoutInitializer
             lks_val
           else
             @printf[I32]("Reading local keys from file.\n".cstring())
-            _local_keys_file.read_local_keys()
-            @printf[I32]("!@ Successfully read local keys from file.\n"
-              .cstring())
+            try
+              _local_keys_file.read_local_keys_and_truncate(
+                snapshot_target as SnapshotId)
+            else
+              Fail()
+              recover val Map[StateName, Map[Key, RoutingId] val] end
+            end
           end
 
         //!@ This needs to take account of keys
@@ -1632,7 +1650,7 @@ actor LocalTopologyInitializer is LayoutInitializer
               error
             end
 
-          if not recovering then
+          if not _recovering then
             _connections.send_control("initializer", topology_ready_msg)
           end
         end
