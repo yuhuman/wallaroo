@@ -67,6 +67,32 @@ def test_boundary_count_status_query():
         # TODO "What do I need to to do get data here?"
         assert q.result() == ""
 
+def test_state_entity_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "state-entity-query")
+        # TODO Get more interesting data in here
+        assert q.result() == {u'Sequence Window':[]}
+
+def test_state_entity_count_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "state-entity-count-query")
+        # TODO Get more interesting data in here
+        assert q.result() == {u'Sequence Window':0}
+
+def test_stateless_partition_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "stateless-partition-query")
+        # TODO Get more interesting data in here
+        assert q.result() == {}
+
+def test_stateless_partition_count_query():
+    with FreshCluster(n_workers=2) as cluster:
+        q = Query(cluster, "stateless-partition-count-query")
+        # TODO Get more interesting data in here
+        assert q.result() == {}
+
+
+
 class FreshCluster(object):
     def __init__(self, host='127.0.0.1', n_sources=1, n_workers=1,
                  command='machida --application-module sequence_window'):
@@ -114,7 +140,6 @@ class FreshCluster(object):
 
     def __exit__(self, type, _value, _traceback):
         if type == Exception:
-            print "EX"
             for r in self._cluster.runners:
                 print r.get_output()
         [ r.stop() for r in self._cluster.runners ]
