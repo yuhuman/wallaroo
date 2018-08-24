@@ -50,7 +50,6 @@ def test_partition_count_query():
             assert int(k)
             assert v == {u"initializer":1}
 
-
 def test_cluster_status_query():
     with FreshCluster(n_workers=2) as cluster:
         q = Query(cluster, "cluster-status-query")

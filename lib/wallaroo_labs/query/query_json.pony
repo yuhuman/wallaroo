@@ -20,53 +20,17 @@ use "collections"
 use "itertools"
 use "json"
 use "../messages"
-use "../mort"
 use "../../wallaroo/core/common"
 
-type JsonDocUnion is (F64 val | I64 val | Bool val | None val | String val | JsonArray ref | JsonObject ref)
-
-type _JsonDelimiters is (_JsonString | _JsonArray | _JsonMap)
-
-primitive _JsonString
-  fun apply(): (String, String) => ("\"", "\"")
-primitive _JsonArray
-  fun apply(): (String, String) => ("[", "]")
-primitive _JsonMap
-  fun apply(): (String, String) => ("{", "}")
-
-
-primitive _Quoted
-  fun apply(s: String): String => "\"" + s + "\""
-
+type JsonDocUnion is (F64 val | I64 val | Bool val
+                     | None val | String val
+                     | JsonArray ref | JsonObject ref)
 type _StepIds is Array[String] val
-
 type _StepIdsByWorker is Map[String, _StepIds] val
-
 type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
 
-primitive _JsonEncoder
-  fun apply(entries: Array[String] val,
-    json_delimiters: _JsonDelimiters,
-    quote_entries: Bool = false):
-    String
-  =>
-    recover
-      var s: Array[U8] iso = recover Array[U8] end
-      s.>append(json_delimiters()._1)
-       .>append(",".join(
-           if quote_entries then
-             Iter[String](entries.values()).map[String](
-               {(s)=> _Quoted(s)})
-           else
-             entries.values()
-           end
-         ))
-       .>append(json_delimiters()._2)
-      String.from_array(consume s)
-    end
 
 primitive PartitionQueryEncoder
-
   fun _encode(
     m: Map[String, _PartitionQueryMap],
     f: {(_StepIds): JsonDocUnion}) :
@@ -97,93 +61,85 @@ primitive PartitionQueryEncoder
   =>
     _encode(m, {(parts) => I64.from[USize](parts.size())})
 
+
 primitive StateEntityQueryEncoder
   fun state_entity_keys(
     digest: Map[String, Array[String] val] val):
     String
   =>
-    let entries = recover iso Array[String] end
-
-    for (k, v) in digest.pairs() do
-      entries.push(_Quoted(k) + ":" + _JsonEncoder(v, _JsonArray, true))
+    let o = JsonObject
+    for (k,vs) in digest.pairs() do
+      let a = JsonArray
+      for v in vs.values() do a.data.push(v) end
+      o.data(k) = a
     end
+    o.string()
 
-    _JsonEncoder(consume entries, _JsonMap)
 
 primitive StateEntityCountQueryEncoder
   fun state_entity_count(
     digest: Map[String, Array[String] val] val):
     String
   =>
-    let entries = recover iso Array[String] end
+    let o = JsonObject
+    for (k,v) in digest.pairs() do o.data(k) = I64.from[USize](v.size()) end
+    o.string()
 
-    for (k, v) in digest.pairs() do
-      entries.push(_Quoted(k) + ":" + v.size().string())
-    end
-
-    _JsonEncoder(consume entries, _JsonMap)
 
 primitive StatelessPartitionQueryEncoder
   fun stateless_partition_keys(
     stateless_partitions: Map[String, Map[String, Array[String] val] val] val):
     String
   =>
-    let entries = recover iso Array[String] end
-
-    for (k, v) in stateless_partitions.pairs() do
-      entries.push(_Quoted(k) + ":" + partitions_by_worker(v))
+    let o = JsonObject
+    for (key,worker_parts) in stateless_partitions.pairs() do
+      let o' = JsonObject
+      for (worker, parts) in worker_parts.pairs() do
+        let a = JsonArray
+        for part in parts.values() do a.data.push(part) end
+        o'.data(worker) = a
+      end
+      o.data(key) = o'
     end
+    o.string()
 
-    _JsonEncoder(consume entries, _JsonMap)
-
-  fun partitions_by_worker(pbw: Map[String, Array[String] val] val): String =>
-    let digest = recover iso Array[String] end
-    for (k, v) in pbw.pairs() do
-      digest.push(_Quoted(k) + ":" + _JsonEncoder(v, _JsonArray))
-    end
-
-    _JsonEncoder(consume digest, _JsonMap)
 
 primitive StatelessPartitionCountQueryEncoder
   fun stateless_partition_count(
     stateless_partitions: Map[String, Map[String, Array[String] val] val] val):
     String
   =>
-    let entries = recover iso Array[String] end
-
-    for (k, v) in stateless_partitions.pairs() do
-      entries.push(_Quoted(k) + ":" + partition_count_by_worker(v))
+    let o = JsonObject
+    for (key,worker_parts) in stateless_partitions.pairs() do
+      let o' = JsonObject
+      for (worker, parts) in worker_parts.pairs() do
+        o'.data(worker) = I64.from[USize](parts.size())
+      end
+      o.data(key) = o'
     end
+    o.string()
 
-    _JsonEncoder(consume entries, _JsonMap)
-
-  fun partition_count_by_worker(pbw: Map[String, Array[String] val] val):
-    String
-  =>
-    let digest = recover iso Array[String] end
-    for (k, v) in pbw.pairs() do
-      digest.push(_Quoted(k) + ":" + v.size().string())
-    end
-
-    _JsonEncoder(consume digest, _JsonMap)
 
 primitive ShrinkQueryJsonEncoder
   fun request(query: Bool, node_names: Array[String] val, node_count: U64):
     String
   =>
-    let entries = recover iso Array[String] end
-    entries.push(_Quoted("query") + ":" + query.string())
-    entries.push(_Quoted("node_names") + ":" + _JsonEncoder(node_names,
-      _JsonArray))
-    entries.push(_Quoted("node_count") + ":" + node_count.string())
-    _JsonEncoder(consume entries, _JsonMap)
+    let o = JsonObject
+    let names = JsonArray
+    for n in node_names.values() do names.data.push(n) end
+    o.data("query") = query
+    o.data("node_names") = names
+    o.data("node_count") = I64.from[U64](node_count)
+    o.string()
 
   fun response(node_names: Array[String] val, node_count: U64): String =>
-    let entries = recover iso Array[String] end
-    entries.push(_Quoted("node_names") + ":" + _JsonEncoder(node_names,
-      _JsonArray))
-    entries.push(_Quoted("node_count") + ":" + node_count.string())
-    _JsonEncoder(consume entries, _JsonMap)
+    let o = JsonObject
+    let names = JsonArray
+    for n in node_names.values() do names.data.push(n) end
+    o.data("node_names") = names
+    o.data("node_count") = I64.from[U64](node_count)
+    o.string()
+
 
 primitive ClusterStatusQueryJsonEncoder
   fun response(worker_count: U64, worker_names: Array[String] val,
@@ -197,6 +153,7 @@ primitive ClusterStatusQueryJsonEncoder
     o.data("processing_messages") = not stop_the_world_in_process
     o.string()
 
+
 primitive SourceIdsQueryEncoder
   fun response(source_ids: Array[String] val): String =>
     let o = JsonObject
@@ -206,106 +163,28 @@ primitive SourceIdsQueryEncoder
     o.string()
 
 
-primitive JsonDecoder
-  fun string_array(s: String): Array[String] val =>
-    let items = recover iso Array[String] end
-    var str = recover iso Array[U8] end
-    if s.size() > 1 then
-      for i in Range(1, s.size()) do
-        let next_char = try s(i)? else Fail(); ' ' end
-        if next_char == ',' then
-          items.push(String.from_array(
-            str = recover iso Array[U8] end))
-        elseif (next_char != ']') and (next_char != '"') then
-          str.push(next_char)
-        end
-      end
-      items.push(String.from_array(str = recover iso Array[U8] end))
-    end
-    consume items
-
 primitive ShrinkQueryJsonDecoder
   fun request(json: String): ExternalShrinkRequestMsg ? =>
-    let p_map = Map[String, String]
-    var is_key = true
-    var this_key = ""
-    var next_key = recover iso Array[U8] end
-    var next_str = recover iso Array[U8] end
-    for i in Range(1, json.size()) do
-      let next_char = json(i)?
-      if is_key then
-        if next_char == ':' then
-          is_key = false
-          this_key = String.from_array(next_key = recover iso Array[U8] end)
-        elseif (next_char != '"') and (next_char != ',') then
-          next_key.push(next_char)
-        end
-      else
-        let delimiter: U8 =
-          match this_key
-          | "query" => ','
-          | "node_names" => ']'
-          | "node_count" => '}'
-          else error
-          end
-        if next_char == delimiter then
-          let str = String.from_array(next_str = recover iso Array[U8] end)
-          p_map(this_key) = str
-          is_key = true
-        else
-          next_str.push(next_char)
-        end
-      end
-    end
-
-    let query_string = p_map("query")?
-    let query = if query_string == "true" then true else false end
-
-    let names_string = p_map("node_names")?
-    let node_names = JsonDecoder.string_array(names_string)
-
-    let node_count: U64 = p_map("node_count")?.u64()?
-
-    ExternalShrinkRequestMsg(query, node_names, node_count)
+    let doc = JsonDoc
+    doc.parse(json)?
+    let obj: JsonObject = doc.data as JsonObject
+    let query = obj.data("query")? as Bool
+    let arr: JsonArray = obj.data("node_names")? as JsonArray
+    let node_count = U64.from[I64](obj.data("node_count")? as I64)
+    let node_names: Array[String] trn = recover trn Array[String] end
+    for n in arr.data.values() do node_names.push(n as String) end
+    ExternalShrinkRequestMsg(query, consume node_names, node_count)
 
   fun response(json: String): ExternalShrinkQueryResponseMsg ? =>
-    let p_map = Map[String, String]
-    var is_key = true
-    var this_key = ""
-    var next_key = recover iso Array[U8] end
-    var next_str = recover iso Array[U8] end
-    for i in Range(1, json.size()) do
-      let next_char = json(i)?
-      if is_key then
-        if next_char == ':' then
-          is_key = false
-          this_key = String.from_array(next_key = recover iso Array[U8] end)
-        elseif (next_char != '"') and (next_char != ',') then
-          next_key.push(next_char)
-        end
-      else
-        let delimiter: U8 =
-          match this_key
-          | "node_names" => ']'
-          | "node_count" => '}'
-          else error
-          end
-        if next_char == delimiter then
-          let str = String.from_array(next_str = recover iso Array[U8] end)
-          p_map(this_key) = str
-          is_key = true
-        else
-          next_str.push(next_char)
-        end
-      end
-    end
+    let doc = JsonDoc
+    doc.parse(json)?
+    let obj: JsonObject = doc.data as JsonObject
+    let arr: JsonArray = obj.data("node_names")? as JsonArray
+    let node_count = U64.from[I64](obj.data("node_count")? as I64)
+    let node_names: Array[String] trn = recover trn Array[String] end
+    for n in arr.data.values() do node_names.push(n as String) end
+    ExternalShrinkQueryResponseMsg(consume node_names, node_count)
 
-    let names_string = p_map("node_names")?
-    let node_names = JsonDecoder.string_array(names_string)
-
-    let node_count: U64 = p_map("node_count")?.u64()?
-
-    ExternalShrinkQueryResponseMsg(node_names, node_count)
 
 primitive ClusterStatusQueryJsonDecoder
   fun response(json: String): ExternalClusterStatusQueryResponseMsg ? =>
