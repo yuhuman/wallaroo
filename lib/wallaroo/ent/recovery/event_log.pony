@@ -26,7 +26,8 @@ use "wallaroo_labs/mort"
 
 trait tag Resilient
   be prepare_for_rollback()
-  be rollback(payload: ByteSeq val, event_log: EventLog)
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
 
 class val EventLogConfig
   let log_dir: (FilePath | AmbientAuth | None)
@@ -231,10 +232,10 @@ actor EventLog
     _phase.expect_rollback_count(count)
 
   fun ref rollback_from_log_entry(resilient_id: RoutingId,
-    payload: ByteSeq val)
+    payload: ByteSeq val, snapshot_id: SnapshotId)
   =>
     try
-      _resilients(resilient_id)?.rollback(payload, this)
+      _resilients(resilient_id)?.rollback(payload, this, snapshot_id)
     else
       //!@ Update message
       @printf[I32](("Can't find resilient for rollback data\n").cstring())
