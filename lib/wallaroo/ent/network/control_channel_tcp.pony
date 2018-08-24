@@ -288,7 +288,7 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           @printf[I32]("Received RequestRecoveryInfoMsg on Control Channel\n"
             .cstring())
         end
-        _snapshot_initiator.inform_recovering_worker(conn)
+        _snapshot_initiator.inform_recovering_worker(m.sender, conn)
       | let m: JoinClusterMsg =>
         ifdef "trace" then
           @printf[I32]("Received JoinClusterMsg on Control Channel\n"
@@ -368,7 +368,8 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         _router_registry.remote_stop_the_world_for_join_migration_request(
           m.new_workers)
       | let m: InitiateJoinMigrationMsg =>
-        _router_registry.remote_join_migration_request(m.new_workers)
+        _router_registry.remote_join_migration_request(m.new_workers,
+          m.snapshot_id)
       | let m: AutoscaleCompleteMsg =>
         _router_registry.autoscale_complete()
       | let m: LeavingMigrationAckRequestMsg =>
@@ -483,12 +484,12 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           m.sender)
       | let m: RecoveryInitiatedMsg =>
         _recovery.recovery_initiated_at_worker(m.sender, m.token)
-      | let m: InitiateRollbackMsg =>
+      | let m: InitiateRollbackBarrierMsg =>
         let promise = Promise[SnapshotRollbackBarrierToken]
         promise.next[None]({(t: SnapshotRollbackBarrierToken) =>
           try
-            let msg = ChannelMsgEncoder.rollback_complete(t, _worker_name,
-              _auth)?
+            let msg = ChannelMsgEncoder.rollback_barrier_complete(t,
+              _worker_name, _auth)?
             _connections.send_control(m.sender, msg)
           else
             Fail()
@@ -501,6 +502,7 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         let promise = Promise[None]
         _event_log.prepare_for_rollback(promise)
       | let m: RollbackTopologyGraphMsg =>
+        @printf[I32]("!@ Rcvd RollbackTopologyGraphMsg\n".cstring())
         let promise = Promise[None]
         promise.next[None]({(n: None) =>
           try
@@ -514,8 +516,8 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           promise)
       | let m: AckRollbackTopologyGraphMsg =>
         _recovery.worker_ack_topology_rollback(m.sender, m.snapshot_id)
-      | let m: RollbackCompleteMsg =>
-        _recovery.rollback_complete(m.sender, m.token)
+      | let m: RollbackBarrierCompleteMsg =>
+        _recovery.rollback_barrier_complete(m.token)
       | let m: EventLogInitiateRollbackMsg =>
         let promise = Promise[SnapshotRollbackBarrierToken]
         promise.next[None]({(t: SnapshotRollbackBarrierToken) =>

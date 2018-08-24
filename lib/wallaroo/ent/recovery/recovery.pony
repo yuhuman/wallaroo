@@ -15,6 +15,7 @@ use "wallaroo/core/common"
 use "wallaroo/core/initialization"
 use "wallaroo/core/messages"
 use "wallaroo/ent/barrier"
+use "wallaroo/ent/data_receiver"
 use "wallaroo/ent/network"
 use "wallaroo/ent/router_registry"
 use "wallaroo/ent/snapshot"
@@ -31,8 +32,9 @@ actor Recovery
     4) _RollbackTopology: Roll back topology. Wait for acks from all workers.
     5) _RollbackBarrier: Use barrier to ensure that all old data is cleared
        and all producers and consumers are ready to rollback state.
-    6) _Rollback: Rollback all state to last safe checkpoint.
-    7) _FinishedRecovering: Finished recovery
+    6) _AwaitDataReceiversAck: Put DataReceivers in non-recovery mode.
+    7) _Rollback: Rollback all state to last safe checkpoint.
+    8) _FinishedRecovering: Finished recovery
   """
   let _self: Recovery tag = this
   let _auth: AmbientAuth
@@ -47,13 +49,14 @@ actor Recovery
   let _connections: Connections
   let _router_registry: RouterRegistry
   var _initializer: (LocalTopologyInitializer | None) = None
+  let _data_receivers: DataReceivers
   // The snapshot id we are recovering to if we're recovering
   var _snapshot_id: (SnapshotId | None) = None
 
   new create(auth: AmbientAuth, worker_name: WorkerName, event_log: EventLog,
     recovery_reconnecter: RecoveryReconnecter,
     snapshot_initiator: SnapshotInitiator, connections: Connections,
-    router_registry: RouterRegistry)
+    router_registry: RouterRegistry, data_receivers: DataReceivers)
   =>
     _auth = auth
     _worker_name = worker_name
@@ -62,6 +65,7 @@ actor Recovery
     _snapshot_initiator = snapshot_initiator
     _connections = connections
     _router_registry = router_registry
+    _data_receivers = data_receivers
 
   be update_snapshot_id(s_id: SnapshotId) =>
     _snapshot_id = s_id
@@ -85,6 +89,9 @@ actor Recovery
 
   be rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
     _recovery_phase.rollback_barrier_complete(token)
+
+  be data_receivers_ack() =>
+    _recovery_phase.data_receivers_ack()
 
   be rollback_complete(worker: WorkerName,
     token: SnapshotRollbackBarrierToken)
@@ -133,7 +140,7 @@ actor Recovery
         //!@ Tell someone to start rolling back topology
         let action = Promise[None]
         action.next[None]({(n: None) =>
-          _self~worker_ack_topology_rollback(_worker_name, snapshot_id)
+          _self.worker_ack_topology_rollback(_worker_name, snapshot_id)
         })
         (_initializer as LocalTopologyInitializer)
           .rollback_topology_graph(snapshot_id, action)
@@ -168,6 +175,14 @@ actor Recovery
     end
 
   fun ref _rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
+    ifdef "resilience" then
+      @printf[I32]("|~~ - Recovery Phase: AwaitDataReceiversAck - ~~|\n"
+        .cstring())
+      _data_receivers.rollback_barrier_complete(this)
+      _recovery_phase = _AwaitDataReceiversAck(this, token)
+    end
+
+  fun ref _data_receivers_ack_complete(token: SnapshotRollbackBarrierToken) =>
     ifdef "resilience" then
       @printf[I32]("|~~ - Recovery Phase: Rollback - ~~|\n".cstring())
       // Inform cluster we've initiated recovery

@@ -411,7 +411,9 @@ actor TCPSink is Sink
     end
     _message_processor = NormalSinkMessageProcessor(this)
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
+  =>
     """
     There is nothing for a TCPSink to rollback to.
     """
