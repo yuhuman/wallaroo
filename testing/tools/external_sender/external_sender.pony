@@ -54,19 +54,25 @@ actor Main
             @printf[I32](
               """
               PARAMETERS:
-              -----------------------------------------------------------------------------------
-              --json/-j [Output JSON format when avaiable]
-              --external/-e [Specifies address to send message to]
-              --type/-t [Specifies message type]
+              -----------------------------------------------------------------
+              --json/-j                 [Output JSON format when avaiable]
+
+              --external/-e <HOST:PORT> [Specifies address to send message to]
+
+              --type/-t                 [Specifies message type]
                   clean-shutdown | rotate-log | partition-query |
                   partition-count-query | cluster-status-query |
-                  source-ids-query | boundary-count-status | print
-              --message/-m [Specifies message contents to send]
+                  source-ids-query | boundary-count-status |
+                  state-entity-query | state-entity-count-query |
+                  stateless-partition-query | stateless-partition-count-query |
+                  print
+
+              --message/-m              [Specifies message contents to send]
                   rotate-log
                       Node name to rotate log files
                   clean-shutdown | print
                       Text to embed in the message
-              -----------------------------------------------------------------------------------
+              -----------------------------------------------------------------
               """.cstring())
             return
           end
