@@ -82,6 +82,9 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
 
   let _state_step_creator: StateStepCreator
 
+  // Snapshot
+  var _next_snapshot_id: SnapshotId = 1
+
   let _pending_message_store: PendingMessageStore =
     _pending_message_store.create()
 
@@ -409,7 +412,8 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
     routing_args: RoutingArguments)
   =>
     if not _pending_message_store.has_pending_state_key(state_name, key) then
-      _state_step_creator.report_unknown_key(this, state_name, key)
+      _state_step_creator.report_unknown_key(this, state_name, key,
+        _next_snapshot_id)
     end
     _pending_message_store.add(state_name, key, routing_args)
 
@@ -551,7 +555,7 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
   be receive_barrier(step_id: RoutingId, producer: Producer,
     barrier_token: BarrierToken)
   =>
-    @printf[I32]("!@ Step %s received barrier from %s\n".cstring(), _id.string().cstring(), step_id.string().cstring())
+    @printf[I32]("!@ Step %s received barrier %s from %s\n".cstring(), _id.string().cstring(), barrier_token.string().cstring(), step_id.string().cstring())
     process_barrier(step_id, producer, barrier_token)
 
   fun ref process_barrier(step_id: RoutingId, producer: Producer,
@@ -617,6 +621,7 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
   // SNAPSHOTS
   //////////////
   fun ref snapshot_state(snapshot_id: SnapshotId) =>
+    _next_snapshot_id = snapshot_id + 1
     ifdef "resilience" then
       StepStateSnapshotter(_runner, _id, snapshot_id, _event_log)
     end
@@ -633,7 +638,10 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
     _pending_message_store.clear()
     _step_message_processor = NormalStepMessageProcessor(this)
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
+  =>
+    _next_snapshot_id = snapshot_id + 1
     ifdef "resilience" then
       StepRollbacker(payload, _runner)
     end

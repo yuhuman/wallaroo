@@ -307,15 +307,16 @@ primitive ChannelMsgEncoder
     _encode(InitiateStopTheWorldForJoinMigrationMsg(new_workers), auth)?
 
   fun initiate_join_migration(new_workers: Array[String] val,
-    auth: AmbientAuth): Array[ByteSeq] val ?
+    snapshot_id: SnapshotId, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
     One worker is contacted by all joining workers and initially coordinates
     state migration to those workers. When it is ready to migrate steps, it
     sends this message to every other current worker informing them to begin
-    migration as well.
+    migration as well. We include the next snapshot id so that local key
+    changes can be logged correctly.
     """
-    _encode(InitiateJoinMigrationMsg(new_workers), auth)?
+    _encode(InitiateJoinMigrationMsg(new_workers, snapshot_id), auth)?
 
   fun autoscale_complete(auth: AmbientAuth): Array[ByteSeq] val ? =>
     """
@@ -480,14 +481,14 @@ primitive ChannelMsgEncoder
   =>
     _encode(RecoveryInitiatedMsg(token, sender), auth)?
 
-  fun initiate_rollback(sender: WorkerName, auth: AmbientAuth):
+  fun initiate_rollback_barrier(sender: WorkerName, auth: AmbientAuth):
     Array[ByteSeq] val ?
   =>
     """
     Sent to the primary snapshot worker from a recovering worker to initiate
     rollback during rollback recovery phase.
     """
-    _encode(InitiateRollbackMsg(sender), auth)?
+    _encode(InitiateRollbackBarrierMsg(sender), auth)?
 
   fun prepare_for_rollback(sender: WorkerName, auth: AmbientAuth):
     Array[ByteSeq] val ?
@@ -513,14 +514,14 @@ primitive ChannelMsgEncoder
     """
     _encode(AckRollbackTopologyGraphMsg(sender, snapshot_id), auth)?
 
-  fun rollback_complete(token: SnapshotRollbackBarrierToken,
+  fun rollback_barrier_complete(token: SnapshotRollbackBarrierToken,
     sender: WorkerName, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
     Sent from the primary snapshot worker to the recovering worker to indicate
-    that rollback is complete.
+    that rollback barrier is complete.
     """
-    _encode(RollbackCompleteMsg(token, sender), auth)?
+    _encode(RollbackBarrierCompleteMsg(token, sender), auth)?
 
   fun event_log_initiate_rollback(token: SnapshotRollbackBarrierToken,
     sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
@@ -1033,20 +1034,20 @@ class val RequestRecoveryInfoMsg is ChannelMsg
   """
   This message is sent to the cluster when beginning recovery.
   """
-  let sender_name: String
+  let sender: String
 
-  new val create(sender: String) =>
-    sender_name = sender
+  new val create(sender': String) =>
+    sender = sender'
 
 class val InformRecoveringWorkerMsg is ChannelMsg
   """
   This message is sent as a response to a RequestRecoveryInfo message.
   """
-  let sender_name: String
+  let sender: String
   let snapshot_id: SnapshotId
 
-  new val create(sender: String, s_id: SnapshotId) =>
-    sender_name = sender
+  new val create(sender': String, s_id: SnapshotId) =>
+    sender = sender'
     snapshot_id = s_id
 
 class val JoinClusterMsg is ChannelMsg
@@ -1132,9 +1133,11 @@ class val InitiateStopTheWorldForJoinMigrationMsg is ChannelMsg
 
 class val InitiateJoinMigrationMsg is ChannelMsg
   let new_workers: Array[String] val
+  let snapshot_id: SnapshotId
 
-  new val create(ws: Array[String] val) =>
+  new val create(ws: Array[String] val, s_id: SnapshotId) =>
     new_workers = ws
+    snapshot_id = s_id
 
 primitive AutoscaleCompleteMsg is ChannelMsg
 
@@ -1357,7 +1360,7 @@ class val EventLogAckRollbackMsg is ChannelMsg
     token = token'
     sender = sender'
 
-class val InitiateRollbackMsg is ChannelMsg
+class val InitiateRollbackBarrierMsg is ChannelMsg
   let sender: WorkerName
 
   new val create(sender': WorkerName) =>
@@ -1385,7 +1388,7 @@ class val AckRollbackTopologyGraphMsg is ChannelMsg
     sender = sender'
     snapshot_id = s_id
 
-class val RollbackCompleteMsg is ChannelMsg
+class val RollbackBarrierCompleteMsg is ChannelMsg
   let token: SnapshotRollbackBarrierToken
   let sender: WorkerName
 

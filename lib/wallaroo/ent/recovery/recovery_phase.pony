@@ -53,6 +53,10 @@ trait _RecoveryPhase
     _invalid_call()
     Fail()
 
+  fun ref data_receivers_ack() =>
+    _invalid_call()
+    Fail()
+
   fun ref rollback_complete(worker: WorkerName,
     token: SnapshotRollbackBarrierToken)
   =>
@@ -136,16 +140,25 @@ class _RollbackTopology is _RecoveryPhase
 
   fun ref worker_ack_topology_rollback(w: WorkerName, snapshot_id: SnapshotId)
   =>
+    @printf[I32]("!@ _RollbackTopology rcvd ack from %s\n".cstring(), w.cstring())
     //!@ Should we just ignore misses here (which indicate an overlapping
     // recovery)?
     if snapshot_id == _snapshot_id then
       _acked_workers.set(w)
       _check_completion()
+    else
+      @printf[I32](("_RollbackTopology received topology rollback ack for " +
+        "snapshot %s, but we're waiting for snapshot %s. Ignoring\n")
+        .cstring(), snapshot_id.string().cstring(),
+        _snapshot_id.string().cstring())
     end
 
   fun ref _check_completion() =>
     if _workers.size() == _acked_workers.size() then
       _recovery._topology_rollback_complete()
+    //!@
+    else
+      @printf[I32]("!@ _RollbackTopology: %s acked out of %s\n".cstring(), _acked_workers.size().string().cstring(), _workers.size().string().cstring())
     end
 
 class _RollbackBarrier is _RecoveryPhase
@@ -158,6 +171,19 @@ class _RollbackBarrier is _RecoveryPhase
 
   fun ref rollback_barrier_complete(token: SnapshotRollbackBarrierToken) =>
     _recovery._rollback_barrier_complete(token)
+
+class _AwaitDataReceiversAck is _RecoveryPhase
+  let _recovery: Recovery ref
+  let _token: SnapshotRollbackBarrierToken
+
+  new create(recovery: Recovery ref, token: SnapshotRollbackBarrierToken) =>
+    _recovery = recovery
+    _token = token
+
+  fun name(): String => "_AwaitDataReceiversAck"
+
+  fun ref data_receivers_ack() =>
+    _recovery._data_receivers_ack_complete(_token)
 
 class _Rollback is _RecoveryPhase
   let _recovery: Recovery ref
