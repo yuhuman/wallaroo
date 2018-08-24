@@ -23,6 +23,8 @@ use "../messages"
 use "../mort"
 use "../../wallaroo/core/common"
 
+type JsonDocUnion is (F64 val | I64 val | Bool val | None val | String val | JsonArray ref | JsonObject ref)
+
 type _JsonDelimiters is (_JsonString | _JsonArray | _JsonMap)
 
 primitive _JsonString
@@ -33,19 +35,20 @@ primitive _JsonMap
   fun apply(): (String, String) => ("{", "}")
 
 
+primitive _Quoted
+  fun apply(s: String) : String =>
+    Fail()
+    "hello"
+
 type _StepIds is Array[String] val
 
 type _StepIdsByWorker is Map[String, _StepIds] val
 
 type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
 
-
-primitive _Quoted
-  fun apply(s: String): String =>
-    "\"" + s + "\""
-
 primitive _JsonEncoder
-  fun apply(entries: Array[String] val, json_delimiters: _JsonDelimiters,
+  fun apply(entries: Array[String] val,
+    json_delimiters: _JsonDelimiters,
     quote_entries: Bool = false):
     String
   =>
@@ -65,62 +68,38 @@ primitive _JsonEncoder
     end
 
 primitive PartitionQueryEncoder
-  fun partition_entities(se: _StepIds): String =>
-    _JsonEncoder(se, _JsonArray)
-
-  fun partition_entities_by_worker(se: _StepIdsByWorker): String =>
-    let entries = recover iso Array[String] end
-    for (k, v) in se.pairs() do
-      entries.push(_Quoted(k) + ":" + partition_entities(v))
-    end
-    _JsonEncoder(consume entries, _JsonMap)
-
   fun partitions(qm: _PartitionQueryMap): String =>
-    let entries = recover iso Array[String] end
-    for (k, v) in qm.pairs() do
-      entries.push(_Quoted(k) + ":" + partition_entities_by_worker(v))
-    end
-    _JsonEncoder(consume entries, _JsonMap)
+    "nope"
 
-  fun partition_counts_by_worker(se: _StepIdsByWorker): String =>
-    let entries = recover iso Array[String] end
-    for (k, v) in se.pairs() do
-      entries.push(_Quoted(k) + ":" + v.size().string())
-    end
-    _JsonEncoder(consume entries, _JsonMap)
-
-  fun partition_counts(qm: _PartitionQueryMap): String =>
-    let entries = recover iso Array[String] end
-    for (k, v) in qm.pairs() do
-      entries.push(_Quoted(k) + ":" + partition_counts_by_worker(v))
-    end
-    _JsonEncoder(consume entries, _JsonMap)
-
-  fun state_and_stateless(m: Map[String, _PartitionQueryMap]): String =>
-    let entries = recover iso Array[String] end
-    try
-      entries.push(_Quoted("state_partitions") + ":" +
-        partitions(m("state_partitions")?))
-      entries.push(_Quoted("stateless_partitions") + ":" +
-        partitions(m("stateless_partitions")?))
-    else
-      Fail()
-    end
-    _JsonEncoder(consume entries, _JsonMap)
-
-  fun state_and_stateless_by_count(m: Map[String, _PartitionQueryMap]):
+  fun _encode(
+    m: Map[String, _PartitionQueryMap],
+    f: {(_StepIds): JsonDocUnion}) :
     String
   =>
-    let entries = recover iso Array[String] end
-    try
-      entries.push(_Quoted("state_partitions") + ":" +
-        partition_counts(m("state_partitions")?))
-      entries.push(_Quoted("stateless_partitions") + ":" +
-        partition_counts(m("stateless_partitions")?))
-    else
-      Fail()
+    let top = JsonObject
+    for (category, pm) in m.pairs() do
+      let cat = JsonObject
+      for (app, worker_map) in pm.pairs() do
+        let app_workers = JsonObject
+        for (worker, parts) in worker_map.pairs() do
+          app_workers.data(worker) = f(parts)
+        end
+        cat.data(app) = app_workers
+      end
+      top.data(category) = cat
     end
-    _JsonEncoder(consume entries, _JsonMap)
+    top.string()
+
+  fun state_and_stateless(m: Map[String, _PartitionQueryMap]): String =>
+    _encode(m, {(parts) =>
+                  let arr = JsonArray
+                  for part in parts.values() do arr.data.push(part) end
+                  arr})
+
+  fun state_and_stateless_by_count(m: Map[String, _PartitionQueryMap]):
+      String
+  =>
+    _encode(m, {(parts) => I64.from[USize](parts.size())})
 
 primitive StateEntityQueryEncoder
   fun state_entity_keys(

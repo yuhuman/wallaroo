@@ -53,7 +53,7 @@ def test_cluster_status_query():
             u"worker_names": [u"initializer", u"worker1"],
             u"worker_count": 2}
 
-def disabled_test_source_ids_query_with_no_sources():
+def test_source_ids_query_with_no_sources():
     # No sources connected results in {"source_ids":[""]}
     with FreshCluster() as cluster:
         q = Query(cluster, "source-ids-query")
@@ -73,7 +73,7 @@ def test_boundary_count_status_query():
         # TODO "What do I need to to do get data here?"
         assert q.result() == ""
 
-class FreshCluster():
+class FreshCluster(object):
     def __init__(self, host='127.0.0.1', n_sources=1, n_workers=1,
                  command='machida --application-module sequence_window'):
         res_dir = tempfile.mkdtemp(dir='/tmp/', prefix='res-data.')
@@ -132,7 +132,7 @@ Cluster=namedtuple('Cluster', ['host',
                                'metrics',
                                'res_dir'])
 
-class Query():
+class Query(object):
     def __init__(self, cluster, type, parser=json.loads):
         host = cluster.host
         port = cluster.ports[0][2]
