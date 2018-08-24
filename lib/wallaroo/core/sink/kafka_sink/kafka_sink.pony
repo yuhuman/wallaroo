@@ -470,7 +470,9 @@ actor KafkaSink is (Sink & KafkaClientManager & KafkaProducer)
     end
     _message_processor = NormalSinkMessageProcessor(this)
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
+  =>
     """
     There is currently nothing for a KafkaSink to rollback to.
     """
