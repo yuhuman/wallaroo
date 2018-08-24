@@ -53,12 +53,6 @@ def test_cluster_status_query():
             u"worker_names": [u"initializer", u"worker1"],
             u"worker_count": 2}
 
-def test_source_ids_query_with_no_sources():
-    # No sources connected results in {"source_ids":[""]}
-    with FreshCluster() as cluster:
-        q = Query(cluster, "source-ids-query")
-        assert q.result() == {"source_ids":[]}
-
 def test_source_ids_query():
     with FreshCluster(n_sources=1) as cluster:
         q = Query(cluster, "source-ids-query")
@@ -118,7 +112,11 @@ class FreshCluster(object):
     def __enter__(self):
         return self._cluster
 
-    def __exit__(self, _type, _value, _traceback):
+    def __exit__(self, type, _value, _traceback):
+        if type == Exception:
+            print "EX"
+            for r in self._cluster.runners:
+                print r.get_output()
         [ r.stop() for r in self._cluster.runners ]
         self._cluster.sink.stop()
         clean_resilience_path(self._cluster.res_dir)

@@ -304,7 +304,7 @@ primitive ExternalMsgDecoder
     | (_SourceIdsQuery(), let s: String) =>
       ExternalSourceIdsQueryMsg
     | (_SourceIdsQueryResponse(), let s: String) =>
-      SourceIdsQueryJsonDecoder.response(s)
+      SourceIdsQueryJsonDecoder.response(s)?
     | (_ReportStatus(), let s: String) =>
       ExternalReportStatusMsg(s)
     | (_StateEntityQuery(), let s: String) =>

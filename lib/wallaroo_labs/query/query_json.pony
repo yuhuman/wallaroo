@@ -36,9 +36,7 @@ primitive _JsonMap
 
 
 primitive _Quoted
-  fun apply(s: String) : String =>
-    Fail()
-    "hello"
+  fun apply(s: String): String => "\"" + s + "\""
 
 type _StepIds is Array[String] val
 
@@ -68,8 +66,6 @@ primitive _JsonEncoder
     end
 
 primitive PartitionQueryEncoder
-  fun partitions(qm: _PartitionQueryMap): String =>
-    "nope"
 
   fun _encode(
     m: Map[String, _PartitionQueryMap],
@@ -193,17 +189,22 @@ primitive ClusterStatusQueryJsonEncoder
   fun response(worker_count: U64, worker_names: Array[String] val,
     stop_the_world_in_process: Bool): String
   =>
-    let entries = recover iso Array[String] end
-    entries.push(_Quoted("processing_messages") + ":" +
-      (not stop_the_world_in_process).string())
-    entries.push(_Quoted("worker_names") + ":" + _JsonEncoder(worker_names,
-      _JsonArray, true))
-    entries.push(_Quoted("worker_count") + ":" + worker_count.string())
-    _JsonEncoder(consume entries, _JsonMap)
+    let o = JsonObject
+    let names = JsonArray
+    for n in worker_names.values() do names.data.push(n) end
+    o.data("worker_count") = I64.from[U64](worker_count)
+    o.data("worker_names") = names
+    o.data("processing_messages") = not stop_the_world_in_process
+    o.string()
 
 primitive SourceIdsQueryEncoder
   fun response(source_ids: Array[String] val): String =>
-    _JsonEncoder(source_ids, _JsonArray)
+    let o = JsonObject
+    let ids = JsonArray
+    for id in source_ids.values() do ids.data.push(id) end
+    o.data("source_ids") = ids
+    o.string()
+
 
 primitive JsonDecoder
   fun string_array(s: String): Array[String] val =>
@@ -222,106 +223,6 @@ primitive JsonDecoder
       items.push(String.from_array(str = recover iso Array[U8] end))
     end
     consume items
-
-primitive PartitionQueryDecoder
-  fun partition_entities(se: String): _StepIds =>
-    JsonDecoder.string_array(se)
-
-  fun partition_entities_by_worker(se: String): _StepIdsByWorker =>
-    let entities = recover iso Map[String, _StepIds] end
-    var is_key = true
-    var after_list = false
-    var next_key = recover iso Array[U8] end
-    var next_list = recover iso Array[U8] end
-    for i in Range(1, se.size()) do
-      let next_char = try se(i)? else Fail(); ' ' end
-      if after_list then
-        if next_char == ',' then
-          after_list = false
-          is_key = true
-        end
-      elseif is_key then
-        if next_char == ':' then
-          is_key = false
-        elseif next_char != '"' then
-          next_key.push(next_char)
-        end
-      else
-        if next_char == ']' then
-          let key = String.from_array(next_key = recover iso Array[U8] end)
-          let list = String.from_array(next_list = recover iso Array[U8] end)
-          entities(key) = partition_entities(list)
-          after_list = true
-        else
-          next_list.push(next_char)
-        end
-      end
-    end
-    consume entities
-
-  fun partitions(qm: String): _PartitionQueryMap =>
-    let entities = recover iso Map[String, _StepIdsByWorker] end
-    var is_key = true
-    var after_map = false
-    var next_key = recover iso Array[U8] end
-    var next_map = recover iso Array[U8] end
-    for i in Range(1, qm.size()) do
-      let next_char = try qm(i)? else Fail(); ' ' end
-      if after_map then
-        if next_char == ',' then
-          after_map = false
-          is_key = true
-        end
-      elseif is_key then
-        if next_char == ':' then
-          is_key = false
-        elseif next_char != '"' then
-          next_key.push(next_char)
-        end
-      else
-        if next_char == '}' then
-          let key = String.from_array(next_key = recover iso Array[U8] end)
-          let map = String.from_array(next_map = recover iso Array[U8] end)
-          entities(key) = partition_entities_by_worker(map)
-          after_map = true
-        else
-          next_map.push(next_char)
-        end
-      end
-    end
-    consume entities
-
-  fun state_and_stateless(json: String): Map[String, _PartitionQueryMap] val =>
-    let p_map = recover iso Map[String, _PartitionQueryMap] end
-    var is_key = true
-    var after_map = false
-    var next_key = recover iso Array[U8] end
-    var next_map = recover iso Array[U8] end
-    for i in Range(1, json.size()) do
-      let next_char = try json(i)? else Fail(); ' ' end
-      if after_map then
-        if next_char == ',' then
-          after_map = false
-          is_key = true
-        end
-      elseif is_key then
-        if next_char == ':' then
-          is_key = false
-        elseif next_char != '"' then
-          next_key.push(next_char)
-        end
-      else
-        if next_char == '}' then
-          let key = String.from_array(next_key = recover iso Array[U8] end)
-          let map = String.from_array(next_map = recover iso Array[U8] end)
-          p_map(key) = partitions(map)
-          after_map = true
-        else
-          next_map.push(next_char)
-        end
-      end
-    end
-    consume p_map
 
 primitive ShrinkQueryJsonDecoder
   fun request(json: String): ExternalShrinkRequestMsg ? =>
@@ -408,58 +309,24 @@ primitive ShrinkQueryJsonDecoder
 
 primitive ClusterStatusQueryJsonDecoder
   fun response(json: String): ExternalClusterStatusQueryResponseMsg ? =>
-    let p_map = Map[String, String]
-    var is_key = true
-    var this_key = ""
-    var next_key = recover iso Array[U8] end
-    var next_str = recover iso Array[U8] end
-    for i in Range(1, json.size()) do
-      let next_char = json(i)?
-      if is_key then
-        if next_char == ':' then
-          is_key = false
-          this_key = String.from_array(next_key = recover iso Array[U8] end)
-        elseif (next_char != '"') and (next_char != ',') then
-          next_key.push(next_char)
-        end
-      else
-        let delimiter: U8 =
-          match this_key
-          | "processing_messages" => ','
-          | "worker_names" => ']'
-          | "worker_count" => '}'
-          else error
-          end
-        if next_char == delimiter then
-          let str = String.from_array(next_str = recover iso Array[U8] end)
-          p_map(this_key) = str
-          is_key = true
-        else
-          next_str.push(next_char)
-        end
-      end
-    end
+    let doc = JsonDoc
+    doc.parse(json)?
+    let obj: JsonObject = doc.data as JsonObject
+    let arr: JsonArray = obj.data("worker_names")? as JsonArray
+    let wn: Array[String] trn = recover trn Array[String] end
 
-    let processing_string = p_map("processing_messages")?
-    let is_processing = if processing_string == "true" then true else false end
+    for n in arr.data.values() do wn.push(n as String) end
+    let wc = U64.from[I64](obj.data("worker_count")? as I64)
+    let p = obj.data("processing_messages")? as Bool
+    ExternalClusterStatusQueryResponseMsg(wc, consume wn, p, json)
 
-    let workers_string = p_map("worker_names")?
-    let worker_names = JsonDecoder.string_array(workers_string)
-
-    let worker_count: U64 = p_map("worker_count")?.u64()?
-
-    ExternalClusterStatusQueryResponseMsg(worker_count, worker_names,
-      is_processing, json)
 
 primitive SourceIdsQueryJsonDecoder
-  fun response(json: String): ExternalSourceIdsQueryResponseMsg =>
+  fun response(json: String): ExternalSourceIdsQueryResponseMsg ? =>
     let doc = JsonDoc
-    let obj = JsonObject
-    let arr = JsonArray
-    let original_hacky_things = JsonDecoder.string_array(json)
-    for x in original_hacky_things.values() do
-      arr.data.push(x)
-    end
-    obj.data("source_ids") = arr
-    doc.data = obj
-    ExternalSourceIdsQueryResponseMsg(doc.string())
+    doc.parse(json)?
+    let obj: JsonObject = doc.data as JsonObject
+    let arr: JsonArray = obj.data("source_ids")? as JsonArray
+    let sis: Array[String] trn = recover trn Array[String] end
+    for id in arr.data.values() do sis.push(id as String) end
+    ExternalSourceIdsQueryResponseMsg(obj.string())
