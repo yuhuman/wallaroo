@@ -91,6 +91,8 @@ actor DummyConsumer is Consumer
   be prepare_for_rollback() =>
     None
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
+  =>
     None
 

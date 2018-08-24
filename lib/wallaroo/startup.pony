@@ -111,6 +111,7 @@ actor Startup
     try
       let auth = _env.root as AmbientAuth
       _startup_options = WallarooConfig.wallaroo_args(_env.args)?
+      _set_recovery_file_names(auth)
       _is_recovering = is_recovering(auth)
       _is_joining = (not _is_recovering) and _startup_options.is_joining
 
@@ -232,7 +233,6 @@ actor Startup
       let initializer_name = "initializer"
 
       let auth = _env.root as AmbientAuth
-      _set_recovery_file_names(auth)
 
       let m_addr = _startup_options.m_arg as Array[String]
 
@@ -352,7 +352,7 @@ actor Startup
 
       let recovery = Recovery(auth, _startup_options.worker_name,
         event_log, recovery_reconnecter, snapshot_initiator, connections,
-        router_registry)
+        router_registry, data_receivers)
 
       let local_topology_initializer =
         LocalTopologyInitializer(
@@ -455,7 +455,8 @@ actor Startup
   be complete_join(info_sending_host: String, m: InformJoiningWorkerMsg) =>
     try
       let auth = _env.root as AmbientAuth
-      _set_recovery_file_names(auth)
+      //!@
+      // _set_recovery_file_names(auth)
 
       let local_keys_filepath: FilePath = FilePath(auth,
         _local_keys_file)?
@@ -549,7 +550,7 @@ actor Startup
 
       let recovery = Recovery(auth, _startup_options.worker_name,
         event_log, recovery_reconnecter, snapshot_initiator, connections,
-        router_registry)
+        router_registry, data_receivers)
 
       let local_topology_initializer =
         LocalTopologyInitializer(
@@ -688,7 +689,9 @@ actor Startup
     let existing_files: Set[String] = Set[String]
 
     try
+      @printf[I32]("!@1\n".cstring())
       let event_log_dir_filepath = _event_log_dir_filepath as FilePath
+      @printf[I32]("!@2\n".cstring())
 
       let event_log_filepath = try
         let elf: FilePath = LastLogFilePath(_event_log_file_basename,

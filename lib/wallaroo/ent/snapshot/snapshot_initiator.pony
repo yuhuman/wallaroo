@@ -105,6 +105,9 @@ actor SnapshotInitiator is Initializable
     @printf[I32]("!@ SnapshotInitiator: remove_worker %s\n".cstring(), w.cstring())
     _workers.unset(w)
 
+  be lookup_next_snapshot_id(p: Promise[SnapshotId]) =>
+    p(_last_complete_snapshot_id + 1)
+
   be initiate_snapshot() =>
     _initiate_snapshot()
 
@@ -165,13 +168,16 @@ actor SnapshotInitiator is Initializable
   be event_log_snapshot_complete(worker: WorkerName, snapshot_id: SnapshotId)
   =>
     ifdef debug then
-      @printf[I32]("Snapshot_Initiator: Event Log SnapshotId %s Complete\n"
-        .cstring(), snapshot_id.string().cstring())
+      @printf[I32](("Snapshot_Initiator: Event Log SnapshotId %s complete " +
+        "for worker %s\n").cstring(), snapshot_id.string().cstring(),
+        worker.cstring())
     end
     _phase.event_log_snapshot_complete(worker, snapshot_id)
 
-  be inform_recovering_worker(conn: TCPConnection) =>
+  be inform_recovering_worker(w: WorkerName, conn: TCPConnection) =>
     try
+      @printf[I32]("Sending recovery data to %\n".cstring(),
+        w.cstring())
       let msg = ChannelMsgEncoder.inform_recovering_worker(_worker_name,
         _last_complete_snapshot_id, _auth)?
       conn.writev(msg)
@@ -263,7 +269,8 @@ actor SnapshotInitiator is Initializable
         resume_token)
     else
       try
-        let msg = ChannelMsgEncoder.initiate_rollback(_worker_name, _auth)?
+        let msg = ChannelMsgEncoder.initiate_rollback_barrier(_worker_name,
+          _auth)?
         _connections.send_control(_primary_worker, msg)
       else
         Fail()

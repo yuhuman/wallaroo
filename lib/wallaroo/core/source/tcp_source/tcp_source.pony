@@ -116,6 +116,9 @@ actor TCPSource is Source
   // Producer (Resilience)
   var _seq_id: SeqId = 1 // 0 is reserved for "not seen yet"
 
+  // Snapshot
+  var _next_snapshot_id: SnapshotId = 1
+
   new _accept(source_id: RoutingId, auth: AmbientAuth,
     listen: TCPSourceListener, notify: TCPSourceNotify iso,
     event_log: EventLog, router': Router,
@@ -403,7 +406,8 @@ actor TCPSource is Source
     routing_args: RoutingArguments)
   =>
     if not _pending_message_store.has_pending_state_key(state_name, key) then
-      _state_step_creator.report_unknown_key(this, state_name, key)
+      _state_step_creator.report_unknown_key(this, state_name, key,
+        _next_snapshot_id)
     end
     _pending_message_store.add(state_name, key, routing_args)
 
@@ -472,6 +476,7 @@ actor TCPSource is Source
     TCPSources don't currently write out any data as part of the snapshot.
     """
     @printf[I32]("!@ TCPSource %s calling EventLog.snapshot_state()\n".cstring(), _source_id.string().cstring())
+    _next_snapshot_id = snapshot_id + 1
     _event_log.snapshot_state(_source_id, snapshot_id,
       recover val Array[ByteSeq] end)
 
@@ -481,10 +486,13 @@ actor TCPSource is Source
   fun ref _prepare_for_rollback() =>
     _pending_message_store.clear()
 
-  be rollback(payload: ByteSeq val, event_log: EventLog) =>
+  be rollback(payload: ByteSeq val, event_log: EventLog,
+    snapshot_id: SnapshotId)
+  =>
     """
     There is nothing for a TCPSource to rollback to.
     """
+    _next_snapshot_id = snapshot_id + 1
     event_log.ack_rollback(_source_id)
 
   /////////
