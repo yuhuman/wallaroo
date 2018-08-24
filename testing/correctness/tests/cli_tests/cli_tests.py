@@ -40,10 +40,16 @@ def test_partition_query():
 
 def test_partition_count_query():
     with FreshCluster() as cluster:
-        q = Query(cluster, "partition-count-query")
-        assert q.result() == {
-            u"state_partitions": {u"Sequence Window": {u"initializer": 2}},
-            u"stateless_partitions": {}}
+        got = Query(cluster, "partition-count-query").result()
+        assert sorted(got.keys()) == [
+            "state_partitions", "stateless_partitions"]
+        assert got["state_partitions"] == {
+            u"Sequence Window": {u"initializer": 2},
+            u"Counter": {u"initializer": 1}}
+        for (k, v) in got["stateless_partitions"].items():
+            assert int(k)
+            assert v == {u"initializer":1}
+
 
 def test_cluster_status_query():
     with FreshCluster(n_workers=2) as cluster:
@@ -70,27 +76,30 @@ def test_boundary_count_status_query():
 def test_state_entity_query():
     with FreshCluster(n_workers=2) as cluster:
         q = Query(cluster, "state-entity-query")
-        # TODO Get more interesting data in here
-        assert q.result() == {u'Sequence Window':[]}
+        assert q.result() == {u'Sequence Window':[], u'Counter': [u'key']}
 
 def test_state_entity_count_query():
     with FreshCluster(n_workers=2) as cluster:
         q = Query(cluster, "state-entity-count-query")
-        # TODO Get more interesting data in here
-        assert q.result() == {u'Sequence Window':0}
+        assert q.result() == {u'Sequence Window':0, u'Counter':1}
 
 def test_stateless_partition_query():
     with FreshCluster(n_workers=2) as cluster:
-        q = Query(cluster, "stateless-partition-query")
-        # TODO Get more interesting data in here
-        assert q.result() == {}
+        got = Query(cluster, "stateless-partition-query").result()
+        for (k,v) in got.items():
+            assert int(k)
+            assert sorted(v.keys()) == [u"initializer", u"worker1"]
+            assert len(v[u"initializer"]) == 1
+            assert int((v[u"initializer"])[0])
+            assert len(v[u"worker1"]) == 1
+            assert int((v[u"worker1"])[0])
 
 def test_stateless_partition_count_query():
     with FreshCluster(n_workers=2) as cluster:
-        q = Query(cluster, "stateless-partition-count-query")
-        # TODO Get more interesting data in here
-        assert q.result() == {}
-
+        got = Query(cluster, "stateless-partition-count-query").result()
+        for (k,v) in got.items():
+            assert int(k)
+            assert v == {u"initializer" : 1, u"worker1": 1}
 
 
 class FreshCluster(object):
