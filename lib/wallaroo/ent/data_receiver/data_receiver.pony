@@ -277,7 +277,7 @@ actor DataReceiver is (Producer & Rerouter)
     _sender_step_id = sender_step_id
     _latest_conn = conn
 
-    // In a recovery scenario, an upstream boundary clears its queue and
+    // TODO: In a recovery scenario, an upstream boundary clears its queue and
     // starts from an earlier snapshot. If the upstream is on a recovering
     // worker, then it will start its seq ids again from 0. These seq ids only
     // serve the purpose of coordinating point to point communication over
