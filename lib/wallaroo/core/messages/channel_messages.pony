@@ -1084,30 +1084,30 @@ class val InformJoiningWorkerMsg is ChannelMsg
   """
   This message is sent as a response to a JoinCluster message.
   """
-  let sender_name: String
+  let sender_name: WorkerName
   let local_topology: LocalTopology
   let metrics_app_name: String
   let metrics_host: String
   let metrics_service: String
-  let control_addrs: Map[String, (String, String)] val
-  let data_addrs: Map[String, (String, String)] val
-  let worker_names: Array[String] val
+  let control_addrs: Map[WorkerName, (String, String)] val
+  let data_addrs: Map[WorkerName, (String, String)] val
+  let worker_names: Array[WorkerName] val
   // The worker currently in control of snapshots
-  let primary_snapshot_worker: String
-  let partition_router_blueprints: Map[String, PartitionRouterBlueprint] val
+  let primary_snapshot_worker: WorkerName
+  let partition_router_blueprints: Map[StateName, PartitionRouterBlueprint] val
   let stateless_partition_router_blueprints:
     Map[U128, StatelessPartitionRouterBlueprint] val
-  let target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] val
+  let target_id_router_blueprints: Map[StateName, TargetIdRouterBlueprint] val
 
-  new val create(sender: String, app: String, l_topology: LocalTopology,
+  new val create(sender: WorkerName, app: String, l_topology: LocalTopology,
     m_host: String, m_service: String,
-    c_addrs: Map[String, (String, String)] val,
-    d_addrs: Map[String, (String, String)] val,
+    c_addrs: Map[WorkerName, (String, String)] val,
+    d_addrs: Map[WorkerName, (String, String)] val,
     w_names: Array[String] val,
-    p_snapshot_worker: String,
-    p_blueprints: Map[String, PartitionRouterBlueprint] val,
+    p_snapshot_worker: WorkerName,
+    p_blueprints: Map[StateName, PartitionRouterBlueprint] val,
     stateless_p_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
-    tidr_blueprints: Map[String, TargetIdRouterBlueprint] val)
+    tidr_blueprints: Map[StateName, TargetIdRouterBlueprint] val)
   =>
     sender_name = sender
     local_topology = l_topology
