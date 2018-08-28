@@ -654,6 +654,15 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
 
   fun ref serialize_state(): ByteSeq val =>
     try
+      //!@
+      match _state
+      | let s: Stringablike =>
+        @printf[I32]("!@ Serializing state: %s\n".cstring(), s.string().cstring())
+      else
+        Fail()
+      end
+
+
       Serialised(SerialiseAuth(_auth), _state)?
         .output(OutputSerialisedAuth(_auth))
     else
@@ -673,6 +682,10 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
     else
       Fail()
     end
+
+//!@
+interface Stringablike
+  fun string(): String
 
 class iso RouterRunner
   fun ref run[D: Any val](metric_name: String, pipeline_time_spent: U64,
