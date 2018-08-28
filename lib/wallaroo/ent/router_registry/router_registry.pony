@@ -74,7 +74,7 @@ actor RouterRegistry
   var _local_topology_initializer: (LocalTopologyInitializer | None) = None
 
   // Map from state name to router for use on the corresponding state steps
-  var _target_id_routers: Map[String, TargetIdRouter] =
+  var _target_id_routers: Map[StateName, TargetIdRouter] =
     _target_id_routers.create()
 
   var _application_ready_to_work: Bool = false
@@ -647,11 +647,11 @@ actor RouterRegistry
     end
 
   be create_target_id_routers_from_blueprint(
-    target_id_router_blueprints: Map[String, TargetIdRouterBlueprint] val,
+    target_id_router_blueprints: Map[StateName, TargetIdRouterBlueprint] val,
     local_sinks: Map[RoutingId, Consumer] val,
     lti: LocalTopologyInitializer)
   =>
-    let obs_trn = recover trn Map[String, OutgoingBoundary] end
+    let obs_trn = recover trn Map[WorkerName, OutgoingBoundary] end
     for (w, ob) in _outgoing_boundaries.pairs() do
       obs_trn(w) = ob
     end
@@ -885,11 +885,11 @@ actor RouterRegistry
       Fail()
     end
 
-  fun inform_joining_worker(conn: TCPConnection, worker: String,
+  fun inform_joining_worker(conn: TCPConnection, worker: WorkerName,
     local_topology: LocalTopology)
   =>
     let state_blueprints =
-      recover iso Map[String, PartitionRouterBlueprint] end
+      recover iso Map[StateName, PartitionRouterBlueprint] end
     for (w, r) in _partition_routers.pairs() do
       state_blueprints(w) = r.blueprint()
     end
@@ -900,7 +900,8 @@ actor RouterRegistry
       stateless_blueprints(id) = r.blueprint()
     end
 
-    let tidr_blueprints = recover iso Map[String, TargetIdRouterBlueprint] end
+    let tidr_blueprints =
+      recover iso Map[StateName, TargetIdRouterBlueprint] end
     for (state_name, tidr) in _target_id_routers.pairs() do
       tidr_blueprints(state_name) = tidr.blueprint()
     end
