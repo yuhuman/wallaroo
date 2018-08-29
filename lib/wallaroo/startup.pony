@@ -487,6 +487,20 @@ actor Startup
           m.data_addrs("initializer")?
         end
 
+      // Generate state routing ids
+      let new_state_routing_ids_iso = recover iso Map[StateName, RoutingId] end
+      let routing_id_gen = RoutingIdGenerator
+      for state_name in m.partition_router_blueprints.keys() do
+        new_state_routing_ids_iso(state_name) = routing_id_gen()
+      end
+      let new_state_routing_ids = consume val new_state_routing_ids_iso
+
+      //!@
+      @printf[I32]("!@ My state routing ids are:\n".cstring())
+      for (s, r) in new_state_routing_ids.pairs() do
+        @printf[I32]("!@ -- %s:%s\n".cstring(), s.cstring(), r.string().cstring())
+      end
+
       let event_log_dir_filepath = _event_log_dir_filepath as FilePath
       _event_log = ifdef "resilience" then
         if _startup_options.log_rotation then
@@ -544,7 +558,7 @@ actor Startup
         connections, state_step_creator, this,
         _startup_options.stop_the_world_pause, _is_joining, initializer_name,
         barrier_initiator, snapshot_initiator, autoscale_initiator,
-        m.sender_name)
+        m.sender_name where joining_state_routing_ids = new_state_routing_ids)
       router_registry.set_event_log(event_log)
 
       let recovery_reconnecter = RecoveryReconnecter(auth,
@@ -563,7 +577,8 @@ actor Startup
           event_log, recovery, recovery_reconnecter, snapshot_initiator,
           barrier_initiator, _local_topology_file, _data_channel_file,
           _worker_names_file, local_keys_filepath, state_step_creator
-          where is_joining = true)
+          where is_joining = true,
+          joining_state_routing_ids = new_state_routing_ids)
 
       if (_external_host != "") or (_external_service != "") then
         let external_channel_notifier =
@@ -576,13 +591,20 @@ actor Startup
           _external_host.cstring(), _external_service.cstring())
       end
 
-      router_registry.set_data_router(
-        DataRouter(_startup_options.worker_name,
+      let dr_state_routing_ids = recover iso Map[RoutingId, StateName] end
+      for (s_name, r_id) in new_state_routing_ids.pairs() do
+        dr_state_routing_ids(r_id) = s_name
+      end
+
+      let data_router = DataRouter(_startup_options.worker_name,
           recover Map[RoutingId, Consumer] end,
           recover LocalStatePartitions end,
-          recover LocalStatePartitionIds end,
-          recover Map[RoutingId, StateName] end))
-      local_topology_initializer.update_topology(m.local_topology)
+          recover LocalStatePartitionIds end, consume dr_state_routing_ids)
+
+      router_registry.set_data_router(data_router)
+      let updated_topology = m.local_topology.add_state_routing_ids(
+        _startup_options.worker_name, new_state_routing_ids)
+      local_topology_initializer.update_topology(updated_topology)
       local_topology_initializer.create_data_channel_listener(m.worker_names,
         _startup_options.my_d_host, _startup_options.my_d_service)
 

@@ -292,14 +292,16 @@ primitive ChannelMsgEncoder
     _encode(InformRecoverNotJoinMsg, auth)?
 
   fun joining_worker_initialized(worker_name: String, c_addr: (String, String),
-    d_addr: (String, String), auth: AmbientAuth): Array[ByteSeq] val ?
+    d_addr: (String, String), state_routing_ids: Map[StateName, RoutingId] val,
+    auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
     This message is sent after a joining worker uses partition blueprints and
     other topology information to initialize its topology. It indicates that
     it is ready to receive migrated steps.
     """
-    _encode(JoiningWorkerInitializedMsg(worker_name, c_addr, d_addr), auth)?
+    _encode(JoiningWorkerInitializedMsg(worker_name, c_addr, d_addr,
+      state_routing_ids), auth)?
 
   fun initiate_stop_the_world_for_join_migration(
     new_workers: Array[String] val, auth: AmbientAuth): Array[ByteSeq] val ?
@@ -345,18 +347,21 @@ primitive ChannelMsgEncoder
     _encode(ReplayBoundaryCountMsg(sender, count), auth)?
 
   fun announce_connections(control_addrs: Map[String, (String, String)] val,
-    data_addrs: Map[String, (String, String)] val, auth: AmbientAuth):
-    Array[ByteSeq] val ?
+    data_addrs: Map[String, (String, String)] val,
+    new_state_routing_ids: Map[WorkerName, Map[StateName, RoutingId] val] val,
+    auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(AnnounceConnectionsMsg(control_addrs, data_addrs), auth)?
+    _encode(AnnounceConnectionsMsg(control_addrs, data_addrs,
+      new_state_routing_ids), auth)?
 
   fun announce_joining_workers(sender: String,
     control_addrs: Map[String, (String, String)] val,
-    data_addrs: Map[String, (String, String)] val, auth: AmbientAuth):
-    Array[ByteSeq] val ?
+    data_addrs: Map[String, (String, String)] val,
+    new_state_routing_ids: Map[WorkerName, Map[StateName, RoutingId] val] val,
+    auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(AnnounceJoiningWorkersMsg(sender, control_addrs, data_addrs),
-      auth)?
+    _encode(AnnounceJoiningWorkersMsg(sender, control_addrs, data_addrs,
+      new_state_routing_ids), auth)?
 
   fun announce_hash_partitions_grow(sender: String,
     joining_workers: Array[String] val,
@@ -1135,13 +1140,15 @@ class val JoiningWorkerInitializedMsg is ChannelMsg
   let worker_name: String
   let control_addr: (String, String)
   let data_addr: (String, String)
+  let state_routing_ids: Map[StateName, RoutingId] val
 
   new val create(name: String, c_addr: (String, String),
-    d_addr: (String, String))
+    d_addr: (String, String), s_routing_ids: Map[StateName, RoutingId] val)
   =>
     worker_name = name
     control_addr = c_addr
     data_addr = d_addr
+    state_routing_ids = s_routing_ids
 
 class val InitiateStopTheWorldForJoinMigrationMsg is ChannelMsg
   let new_workers: Array[String] val
@@ -1169,25 +1176,31 @@ class val LeavingWorkerDoneMigratingMsg is ChannelMsg
 class val AnnounceConnectionsMsg is ChannelMsg
   let control_addrs: Map[String, (String, String)] val
   let data_addrs: Map[String, (String, String)] val
+  let new_state_routing_ids: Map[WorkerName, Map[StateName, RoutingId] val] val
 
   new val create(c_addrs: Map[String, (String, String)] val,
-    d_addrs: Map[String, (String, String)] val)
+    d_addrs: Map[String, (String, String)] val,
+    sri: Map[WorkerName, Map[StateName, RoutingId] val] val)
   =>
     control_addrs = c_addrs
     data_addrs = d_addrs
+    new_state_routing_ids = sri
 
 class val AnnounceJoiningWorkersMsg is ChannelMsg
   let sender: String
   let control_addrs: Map[String, (String, String)] val
   let data_addrs: Map[String, (String, String)] val
+  let new_state_routing_ids: Map[WorkerName, Map[StateName, RoutingId] val] val
 
   new val create(sender': String,
     c_addrs: Map[String, (String, String)] val,
-    d_addrs: Map[String, (String, String)] val)
+    d_addrs: Map[String, (String, String)] val,
+    sri: Map[WorkerName, Map[StateName, RoutingId] val] val)
   =>
     sender = sender'
     control_addrs = c_addrs
     data_addrs = d_addrs
+    new_state_routing_ids = sri
 
 class val AnnounceHashPartitionsGrowMsg is ChannelMsg
   let sender: String
