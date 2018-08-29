@@ -518,6 +518,7 @@ class _WaitingForConnections is _AutoscalePhase
     @printf[I32](("AUTOSCALE: Waiting for %s current workers to connect " +
       "to joining workers.\n").cstring(),
       _connecting_worker_count.string().cstring())
+    @printf[I32]("!@ -- current_worker_count: %s\n".cstring(), current_worker_count.string().cstring())
 
   fun name(): String => "WaitingForConnections"
 
@@ -525,6 +526,7 @@ class _WaitingForConnections is _AutoscalePhase
     """
     Indicates that another worker has connected to joining workers.
     """
+    @printf[I32]("!@ worker_connected_to_joining_workers from %s\n".cstring(), worker.cstring())
     _connected_workers.set(worker)
     if _connected_workers.size() == _connecting_worker_count then
       _autoscale.initiate_stop_the_world_for_join_migration(_new_workers)
