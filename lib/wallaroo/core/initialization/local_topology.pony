@@ -1522,6 +1522,7 @@ actor LocalTopologyInitializer is LayoutInitializer
               @printf[I32](("----Creating source for " + pipeline_name +
                 " pipeline with " + source_data.name() + "----\n").cstring())
 
+              // Set up SourceListener builders
               sl_builders.push(source_data.source_listener_builder_builder()(
                 source_data.builder()(source_data.runner_builder(),
                   out_router, _metrics_conn,
