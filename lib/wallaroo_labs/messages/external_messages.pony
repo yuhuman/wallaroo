@@ -103,7 +103,7 @@ primitive ExternalMsgEncoder
     wb: Writer = Writer): Array[ByteSeq] val
   =>
     let digest_map = _partition_digest(state_routers, stateless_routers)
-    let pqr = PartitionQueryEncoder.state_and_stateless(digest_map)
+    let pqr = PartitionQueryStateAndStatelessIdsEncoder(digest_map)
     _encode(_PartitionQueryResponse(), pqr, wb)
 
   fun cluster_status_query(wb: Writer = Writer): Array[ByteSeq] val =>
@@ -139,7 +139,7 @@ primitive ExternalMsgEncoder
     wb: Writer = Writer): Array[ByteSeq] val
   =>
     let digest_map = _partition_digest(state_routers, stateless_routers)
-    let pqr = PartitionQueryEncoder.state_and_stateless_by_count(digest_map)
+    let pqr = PartitionQueryStateAndStatelessCountsEncoder(digest_map)
     _encode(_PartitionCountQueryResponse(), pqr, wb)
 
   fun source_ids_query(wb: Writer = Writer): Array[ByteSeq] val =>

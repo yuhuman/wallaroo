@@ -26,34 +26,16 @@ type _StepIds is Array[String] val
 type _StepIdsByWorker is Map[String, _StepIds] val
 type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
 
+primitive PartitionQueryStateAndStatelessIdsEncoder
+  fun apply(m: Map[String, _PartitionQueryMap]): String =>
+    _PartitionQueryEncoder(m
+      where step_ids_to_json = _EncodeStringArray~apply())
 
-primitive PartitionQueryEncoder
-  fun _encode(
-    m: Map[String, _PartitionQueryMap],
-    f: {(_StepIds): JsonType}) :
-    String
-  =>
-    let top = JsonObject
-    for (category, pm) in m.pairs() do
-      let cat = JsonObject
-      for (app, worker_map) in pm.pairs() do
-        let app_workers = JsonObject
-        for (worker, parts) in worker_map.pairs() do
-          app_workers.data(worker) = f(parts)
-        end
-        cat.data(app) = app_workers
-      end
-      top.data(category) = cat
-    end
-    top.string()
 
-  fun state_and_stateless(m: Map[String, _PartitionQueryMap]): String =>
-    _encode(m, {(parts) => _EncodeStringArray(parts)})
-
-  fun state_and_stateless_by_count(m: Map[String, _PartitionQueryMap]):
-      String
-  =>
-    _encode(m, {(parts) => I64.from[USize](parts.size())})
+primitive PartitionQueryStateAndStatelessCountsEncoder
+  fun apply(m: Map[String, _PartitionQueryMap]): String =>
+    _PartitionQueryEncoder(m
+      where step_ids_to_json = _EncodeArrayLength~apply())
 
 
 primitive StateEntityQueryEncoder
@@ -72,17 +54,17 @@ primitive StateEntityCountQueryEncoder
     String
   =>
     let o = JsonObject
-    for (k,v) in digest.pairs() do o.data(k) = I64.from[USize](v.size()) end
+    for (k,v) in digest.pairs() do o.data(k) = _EncodeArrayLength(v) end
     o.string()
 
 
 primitive StatelessPartitionQueryEncoder
   fun stateless_partition_keys(
-    stateless_partitions: Map[String, Map[String, Array[String] val] val] val):
+    stateless_parts: Map[String, Map[String, Array[String] val] val] val):
     String
   =>
     let o = JsonObject
-    for (key,worker_parts) in stateless_partitions.pairs() do
+    for (key,worker_parts) in stateless_parts.pairs() do
       let o' = JsonObject
       for (worker, parts) in worker_parts.pairs() do
         o'.data(worker) = _EncodeStringArray(parts)
@@ -94,14 +76,14 @@ primitive StatelessPartitionQueryEncoder
 
 primitive StatelessPartitionCountQueryEncoder
   fun stateless_partition_count(
-    stateless_partitions: Map[String, Map[String, Array[String] val] val] val):
+    stateless_parts: Map[String, Map[String, Array[String] val] val] val):
     String
   =>
     let o = JsonObject
-    for (key,worker_parts) in stateless_partitions.pairs() do
+    for (key,worker_parts) in stateless_parts.pairs() do
       let o' = JsonObject
       for (worker, parts) in worker_parts.pairs() do
-        o'.data(worker) = I64.from[USize](parts.size())
+        o'.data(worker) = _EncodeArrayLength(parts)
       end
       o.data(key) = o'
     end
@@ -143,6 +125,27 @@ primitive SourceIdsQueryEncoder
     o.string()
 
 
+primitive _PartitionQueryEncoder
+  fun apply(
+    m: Map[String, _PartitionQueryMap],
+    step_ids_to_json: {(_StepIds): JsonType}) :
+    String
+  =>
+    let top = JsonObject
+    for (category, pm) in m.pairs() do
+      let cat = JsonObject
+      for (app, worker_map) in pm.pairs() do
+        let app_workers = JsonObject
+        for (worker, parts) in worker_map.pairs() do
+          app_workers.data(worker) = step_ids_to_json(parts)
+        end
+        cat.data(app) = app_workers
+      end
+      top.data(category) = cat
+    end
+    top.string()
+
+
 primitive ShrinkQueryJsonDecoder
   fun request(json: String): ExternalShrinkRequestMsg ? =>
     let doc = JsonDoc
@@ -170,7 +173,6 @@ primitive ClusterStatusQueryJsonDecoder
     doc.parse(json)?
     let obj: JsonObject = doc.data as JsonObject
     let arr: JsonArray = obj.data("worker_names")? as JsonArray
-
     let wn = _DecodeStringArray(arr)?
     let wc = U64.from[I64](obj.data("worker_count")? as I64)
     let p = obj.data("processing_messages")? as Bool
@@ -185,6 +187,10 @@ primitive SourceIdsQueryJsonDecoder
     let arr: JsonArray = obj.data("source_ids")? as JsonArray
     let sis = _DecodeStringArray(arr)?
     ExternalSourceIdsQueryResponseMsg(consume sis, json)
+
+primitive _EncodeArrayLength
+  fun apply(a: Array[String val] val) : I64 =>
+    I64.from[USize](a.size())
 
 primitive _EncodeStringArray
   fun apply(a: Array[String val] val) : JsonArray =>
