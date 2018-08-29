@@ -400,7 +400,8 @@ actor LocalTopologyInitializer is LayoutInitializer
     match _topology
     | let t: LocalTopology =>
       if not ArrayHelpers[String].contains[String](t.worker_names, w) then
-        _add_worker_name(w)
+        let updated_topology = _add_worker_name(w, t)
+        @printf[I32]("!@ Added worker %s to LocalTopology\n".cstring(), w.cstring())
         _connections.create_control_connection(w, joining_host,
           control_addr._2)
         _connections.create_data_connection_to_joining_worker(w, joining_host,
@@ -408,7 +409,8 @@ actor LocalTopologyInitializer is LayoutInitializer
         let new_boundary_id = _routing_id_gen()
         _connections.create_boundary_to_joining_worker(w, new_boundary_id,
           state_routing_ids, this)
-        _topology = t.add_state_routing_ids(w, state_routing_ids)
+        _topology = updated_topology.add_state_routing_ids(w,
+          state_routing_ids)
         @printf[I32]("***New worker %s added to cluster!***\n".cstring(),
           w.cstring())
       end
@@ -515,15 +517,12 @@ actor LocalTopologyInitializer is LayoutInitializer
       _outgoing_boundary_builders)
     _router_registry.joining_worker_initialized(w, state_routing_ids)
 
-  fun ref _add_worker_name(w: String) =>
-    match _topology
-    | let t: LocalTopology =>
-      _topology = t.add_worker_name(w)
-      _save_local_topology()
-      _save_worker_names()
-    else
-      Fail()
-    end
+  fun ref _add_worker_name(w: String, t: LocalTopology): LocalTopology =>
+    let updated_topology = t.add_worker_name(w)
+    _topology = updated_topology
+    _save_local_topology()
+    _save_worker_names()
+    updated_topology
 
   fun ref _remove_worker_names(ws: Array[String] val): Array[String] val =>
     match _topology
