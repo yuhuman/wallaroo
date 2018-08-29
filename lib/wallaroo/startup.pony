@@ -52,7 +52,6 @@ actor Startup
 
   var _external_host: String = ""
   var _external_service: String = ""
-  var _is_multi_worker: Bool = true
   var _cluster_initializer: (ClusterInitializer | None) = None
   var _application_distributor: (ApplicationDistributor | None) = None
   var _swarm_manager_addr: String = ""
@@ -115,6 +114,12 @@ actor Startup
       _is_recovering = is_recovering(auth)
       _is_joining = (not _is_recovering) and _startup_options.is_joining
 
+      if _is_joining then
+        @printf[I32]("New worker preparing to join cluster\n".cstring())
+      elseif _is_recovering then
+        @printf[I32]("Attempting to recover...\n".cstring())
+      end
+
       (_external_host, _external_service) =
         match _startup_options.x_arg
         | let addr: Array[String] =>
@@ -142,24 +147,23 @@ actor Startup
           _startup_options.log_rotation.string() + "|||\n").cstring())
       end
 
-      if _is_joining then
-        @printf[I32]("New worker preparing to join cluster\n".cstring())
-      else
-        match _startup_options.worker_count
-        | let wc: USize =>
-          if wc == 1 then
-            @printf[I32]("Single worker topology\n".cstring())
-            _is_multi_worker = false
-          else
-            @printf[I32]((_startup_options.worker_count.string() +
-              " worker topology\n").cstring())
-          end
-        else
-          if _startup_options.is_initializer then
-            Unreachable()
-          end
-        end
-      end
+      //!@
+      // if not _is_joining then
+      //   match _startup_options.worker_count
+      //   | let wc: USize =>
+      //     if wc == 1 then
+      //       @printf[I32]("Single worker topology\n".cstring())
+      //       _is_multi_worker = false
+      //     else
+      //       @printf[I32]((_startup_options.worker_count.string() +
+      //         " worker topology\n").cstring())
+      //     end
+      //   else
+      //     if _startup_options.is_initializer then
+      //       Unreachable()
+      //     end
+      //   end
+      // end
 
       if _is_joining then
         if _startup_options.worker_name == "" then
@@ -174,7 +178,6 @@ actor Startup
         let control_conn: TCPConnection =
           TCPConnection(auth, consume control_notifier, j_addr(0)?, j_addr(1)?)
         _disposables.set(control_conn)
-        @printf[I32]("Attempting to join cluster...\n".cstring())
         // This only exists to keep joining worker alive while it waits for
         // cluster information.
         // TODO: Eliminate the need for this.
@@ -182,31 +185,9 @@ actor Startup
         _joining_listener = joining_listener
         _disposables.set(joining_listener)
       elseif _is_recovering then
-        // if _startup_options.is_initializer then
         (let snapshot_id, let rollback_id) =
           LatestSnapshotId.read(auth, _snapshot_ids_file)
         _initialize(snapshot_id)
-        //!@
-        // let connect_addr =
-        //   match _startup_options.j_arg
-        //   | let j: Array[String] => j
-        //   else
-        //     _startup_options.c_addr
-        //   end
-        // let control_notifier: TCPConnectionNotify iso =
-        //   RecoveryControlSenderConnectNotifier(auth,
-        //     _startup_options.worker_name, this)
-        // let control_conn: TCPConnection =
-        //   TCPConnection(auth, consume control_notifier, connect_addr(0)?,
-        //     connect_addr(1)?)
-        // _disposables.set(control_conn)
-        // @printf[I32]("Requesting recovery info from cluster...\n".cstring())
-        // // This only exists to keep recovering worker alive while it waits for
-        // // cluster information.
-        // // TODO: Eliminate the need for this.
-        // let recovery_listener = TCPListener(auth, RecoveryListenNotifier)
-        // _recovery_listener = recovery_listener
-        // _disposables.set(recovery_listener)
       else
         _initialize()
       end
@@ -433,7 +414,7 @@ actor Startup
         // that point replay starts
         let recovered_workers = _recover_worker_names(
           worker_names_filepath)
-        if _is_multi_worker then
+        if recovered_workers.size() > 1 then
           local_topology_initializer.recover_and_initialize(
             recovered_workers, snapshot_id as SnapshotId,
             _cluster_initializer)
@@ -664,11 +645,13 @@ actor Startup
       Fail()
     end
 
+  //!@
   be recover_not_join() =>
     """
     Called when the cluster informs us we should be recovering instead of
     joining (i.e. we've already joined, so we must be coming back up).
     """
+    Fail()
     // Dispose of temporary listener
     match _joining_listener
     | let tcp_l: TCPListener =>
