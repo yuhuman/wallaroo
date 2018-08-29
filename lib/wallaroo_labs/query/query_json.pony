@@ -22,9 +22,6 @@ use "json"
 use "../messages"
 use "../../wallaroo/core/common"
 
-type JsonDocUnion is (F64 val | I64 val | Bool val
-                     | None val | String val
-                     | JsonArray ref | JsonObject ref)
 type _StepIds is Array[String] val
 type _StepIdsByWorker is Map[String, _StepIds] val
 type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
@@ -33,7 +30,7 @@ type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
 primitive PartitionQueryEncoder
   fun _encode(
     m: Map[String, _PartitionQueryMap],
-    f: {(_StepIds): JsonDocUnion}) :
+    f: {(_StepIds): JsonType}) :
     String
   =>
     let top = JsonObject
@@ -51,10 +48,7 @@ primitive PartitionQueryEncoder
     top.string()
 
   fun state_and_stateless(m: Map[String, _PartitionQueryMap]): String =>
-    _encode(m, {(parts) =>
-                  let arr = JsonArray
-                  for part in parts.values() do arr.data.push(part) end
-                  arr})
+    _encode(m, {(parts) => _EncodeStringArray(parts)})
 
   fun state_and_stateless_by_count(m: Map[String, _PartitionQueryMap]):
       String
@@ -68,11 +62,7 @@ primitive StateEntityQueryEncoder
     String
   =>
     let o = JsonObject
-    for (k,vs) in digest.pairs() do
-      let a = JsonArray
-      for v in vs.values() do a.data.push(v) end
-      o.data(k) = a
-    end
+    for (k,vs) in digest.pairs() do o.data(k) = _EncodeStringArray(vs) end
     o.string()
 
 
@@ -95,9 +85,7 @@ primitive StatelessPartitionQueryEncoder
     for (key,worker_parts) in stateless_partitions.pairs() do
       let o' = JsonObject
       for (worker, parts) in worker_parts.pairs() do
-        let a = JsonArray
-        for part in parts.values() do a.data.push(part) end
-        o'.data(worker) = a
+        o'.data(worker) = _EncodeStringArray(parts)
       end
       o.data(key) = o'
     end
@@ -125,18 +113,14 @@ primitive ShrinkQueryJsonEncoder
     String
   =>
     let o = JsonObject
-    let names = JsonArray
-    for n in node_names.values() do names.data.push(n) end
     o.data("query") = query
-    o.data("node_names") = names
+    o.data("node_names") = _EncodeStringArray(node_names)
     o.data("node_count") = I64.from[U64](node_count)
     o.string()
 
   fun response(node_names: Array[String] val, node_count: U64): String =>
     let o = JsonObject
-    let names = JsonArray
-    for n in node_names.values() do names.data.push(n) end
-    o.data("node_names") = names
+    o.data("node_names") = _EncodeStringArray(node_names)
     o.data("node_count") = I64.from[U64](node_count)
     o.string()
 
@@ -146,10 +130,8 @@ primitive ClusterStatusQueryJsonEncoder
     stop_the_world_in_process: Bool): String
   =>
     let o = JsonObject
-    let names = JsonArray
-    for n in worker_names.values() do names.data.push(n) end
     o.data("worker_count") = I64.from[U64](worker_count)
-    o.data("worker_names") = names
+    o.data("worker_names") = _EncodeStringArray(worker_names)
     o.data("processing_messages") = not stop_the_world_in_process
     o.string()
 
@@ -157,9 +139,7 @@ primitive ClusterStatusQueryJsonEncoder
 primitive SourceIdsQueryEncoder
   fun response(source_ids: Array[String] val): String =>
     let o = JsonObject
-    let ids = JsonArray
-    for id in source_ids.values() do ids.data.push(id) end
-    o.data("source_ids") = ids
+    o.data("source_ids") = _EncodeStringArray(source_ids)
     o.string()
 
 
@@ -171,9 +151,8 @@ primitive ShrinkQueryJsonDecoder
     let query = obj.data("query")? as Bool
     let arr: JsonArray = obj.data("node_names")? as JsonArray
     let node_count = U64.from[I64](obj.data("node_count")? as I64)
-    let node_names: Array[String] trn = recover trn Array[String] end
-    for n in arr.data.values() do node_names.push(n as String) end
-    ExternalShrinkRequestMsg(query, consume node_names, node_count)
+    let node_names = _DecodeStringArray(arr)?
+    ExternalShrinkRequestMsg(query, node_names, node_count)
 
   fun response(json: String): ExternalShrinkQueryResponseMsg ? =>
     let doc = JsonDoc
@@ -181,9 +160,8 @@ primitive ShrinkQueryJsonDecoder
     let obj: JsonObject = doc.data as JsonObject
     let arr: JsonArray = obj.data("node_names")? as JsonArray
     let node_count = U64.from[I64](obj.data("node_count")? as I64)
-    let node_names: Array[String] trn = recover trn Array[String] end
-    for n in arr.data.values() do node_names.push(n as String) end
-    ExternalShrinkQueryResponseMsg(consume node_names, node_count)
+    let node_names = _DecodeStringArray(arr)?
+    ExternalShrinkQueryResponseMsg(node_names, node_count)
 
 
 primitive ClusterStatusQueryJsonDecoder
@@ -192,12 +170,11 @@ primitive ClusterStatusQueryJsonDecoder
     doc.parse(json)?
     let obj: JsonObject = doc.data as JsonObject
     let arr: JsonArray = obj.data("worker_names")? as JsonArray
-    let wn: Array[String] trn = recover trn Array[String] end
 
-    for n in arr.data.values() do wn.push(n as String) end
+    let wn = _DecodeStringArray(arr)?
     let wc = U64.from[I64](obj.data("worker_count")? as I64)
     let p = obj.data("processing_messages")? as Bool
-    ExternalClusterStatusQueryResponseMsg(wc, consume wn, p, json)
+    ExternalClusterStatusQueryResponseMsg(wc, wn, p, json)
 
 
 primitive SourceIdsQueryJsonDecoder
@@ -206,6 +183,17 @@ primitive SourceIdsQueryJsonDecoder
     doc.parse(json)?
     let obj: JsonObject = doc.data as JsonObject
     let arr: JsonArray = obj.data("source_ids")? as JsonArray
-    let sis: Array[String] trn = recover trn Array[String] end
-    for id in arr.data.values() do sis.push(id as String) end
-    ExternalSourceIdsQueryResponseMsg(obj.string())
+    let sis = _DecodeStringArray(arr)?
+    ExternalSourceIdsQueryResponseMsg(consume sis, json)
+
+primitive _EncodeStringArray
+  fun apply(a: Array[String val] val) : JsonArray =>
+    let arr = JsonArray
+    for v in a.values() do arr.data.push(v) end
+    arr
+
+primitive _DecodeStringArray
+  fun apply(j: JsonArray) : Array[String] val ? =>
+    let result: Array[String] trn = recover trn Array[String] end
+    for v in j.data.values() do result.push(v as String) end
+    consume result
