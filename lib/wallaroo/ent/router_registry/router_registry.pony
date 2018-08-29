@@ -47,7 +47,7 @@ actor RouterRegistry
   let _id: RoutingId
   let _auth: AmbientAuth
   let _data_receivers: DataReceivers
-  let _worker_name: String
+  let _worker_name: WorkerName
   let _connections: Connections
   let _state_step_creator: StateStepCreator
   let _recovery_file_cleaner: RecoveryFileCleaner
@@ -56,11 +56,11 @@ actor RouterRegistry
   let _autoscale_initiator: AutoscaleInitiator
   var _data_router: DataRouter
   var _pre_state_data: (Array[PreStateData] val | None) = None
-  let _partition_routers: Map[String, PartitionRouter] =
+  let _partition_routers: Map[StateName, PartitionRouter] =
     _partition_routers.create()
   let _stateless_partition_routers: Map[U128, StatelessPartitionRouter] =
     _stateless_partition_routers.create()
-  let _data_receiver_map: Map[String, DataReceiver] =
+  let _data_receiver_map: Map[StateName, DataReceiver] =
     _data_receiver_map.create()
 
   //!@
@@ -69,7 +69,7 @@ actor RouterRegistry
   // shift to other workers, and this means we need our SnapshotInitiator
   // to add to the information we send to a joining worker (since it will
   // know who the primary snapshot worker is).
-  let _initializer_name: String
+  let _initializer_name: WorkerName
 
   var _local_topology_initializer: (LocalTopologyInitializer | None) = None
 
@@ -83,7 +83,7 @@ actor RouterRegistry
   // Subscribers
   // All steps that have a PartitionRouter, registered by partition
   // state name
-  let _partition_router_subs: Map[String, SetIs[_RouterSub]] =
+  let _partition_router_subs: Map[StateName, SetIs[_RouterSub]] =
     _partition_router_subs.create()
   // All steps that have a StatelessPartitionRouter, registered by
   // partition id
@@ -93,7 +93,7 @@ actor RouterRegistry
   // All steps that have a TargetIdRouter (state steps), registered by state
   // name. The StateStepCreator is also registered here.
   let _target_id_router_updatables:
-    Map[String, SetIs[_TargetIdRouterUpdatable]] =
+    Map[StateName, SetIs[_TargetIdRouterUpdatable]] =
       _target_id_router_updatables.create()
 
   // For anyone who wants to know about every target_id_router
@@ -123,9 +123,9 @@ actor RouterRegistry
   // Boundary builders are used by new TCPSources to create their own
   // individual boundaries to other workers (to allow for increased
   // throughput).
-  let _outgoing_boundaries_builders: Map[String, OutgoingBoundaryBuilder] =
+  let _outgoing_boundaries_builders: Map[WorkerName, OutgoingBoundaryBuilder] =
     _outgoing_boundaries_builders.create()
-  let _outgoing_boundaries: Map[String, OutgoingBoundary] =
+  let _outgoing_boundaries: Map[WorkerName, OutgoingBoundary] =
     _outgoing_boundaries.create()
 
   //////
@@ -137,14 +137,15 @@ actor RouterRegistry
 
   // TODO: Add management of pending steps to Autoscale protocol class
   // Steps migrated out and waiting for acknowledgement
-  let _step_waiting_list: SetIs[U128] = _step_waiting_list.create()
+  let _step_waiting_list: SetIs[RoutingId] = _step_waiting_list.create()
 
   // Workers in running cluster that have been stopped for stop the world
   let _stopped_worker_waiting_list: _StringSet =
     _stopped_worker_waiting_list.create()
 
   // TODO: Move management of this list to Autoscale class
-  var _leaving_workers: Array[String] val = recover Array[String] end
+  var _leaving_workers: Array[WorkerName] val =
+    recover Array[WorkerName] end
 
   // Used as a proxy for RouterRegistry when muting and unmuting sources
   // and data channel.
@@ -154,6 +155,7 @@ actor RouterRegistry
   var _stop_the_world_pause: U64
 
   var _waiting_to_finish_join: Bool = false
+  var _joining_state_routing_ids: (Map[StateName, RoutingId] val | None)
 
   var _event_log: (EventLog | None) = None
 
@@ -161,17 +163,18 @@ actor RouterRegistry
 
   // If this is a worker that joined during an autoscale event, then there
   // is one worker we contacted to join.
-  let _contacted_worker: (String | None)
+  let _contacted_worker: (WorkerName | None)
 
-  new create(auth: AmbientAuth, worker_name: String,
+  new create(auth: AmbientAuth, worker_name: WorkerName,
     data_receivers: DataReceivers, c: Connections,
     state_step_creator: StateStepCreator,
     recovery_file_cleaner: RecoveryFileCleaner, stop_the_world_pause: U64,
-    is_joining: Bool, initializer_name: String,
+    is_joining: Bool, initializer_name: WorkerName,
     barrier_initiator: BarrierInitiator,
     snapshot_initiator: SnapshotInitiator,
     autoscale_initiator: AutoscaleInitiator,
-    contacted_worker: (String | None) = None)
+    contacted_worker: (WorkerName | None) = None,
+    joining_state_routing_ids: (Map[StateName, RoutingId] val | None) = None)
   =>
     _auth = auth
     _worker_name = worker_name
@@ -189,6 +192,7 @@ actor RouterRegistry
     _id = (digestof this).u128()
     _data_receivers.set_router_registry(this)
     _contacted_worker = contacted_worker
+    _joining_state_routing_ids = joining_state_routing_ids
     _data_router = DataRouter(_worker_name,
       recover Map[RoutingId, Consumer] end,
       recover LocalStatePartitions end, recover LocalStatePartitionIds end,
@@ -212,7 +216,7 @@ actor RouterRegistry
   be set_pre_state_data(psd: Array[PreStateData] val) =>
     _pre_state_data = psd
 
-  be set_partition_router(state_name: String, pr: PartitionRouter) =>
+  be set_partition_router(state_name: StateName, pr: PartitionRouter) =>
     _partition_routers(state_name) = pr
 
   be set_stateless_partition_router(partition_id: U128,
@@ -220,10 +224,10 @@ actor RouterRegistry
   =>
     _stateless_partition_routers(partition_id) = pr
 
-  be set_target_id_router(state_name: String, t: TargetIdRouter) =>
+  be set_target_id_router(state_name: StateName, t: TargetIdRouter) =>
     _set_target_id_router(state_name, t)
 
-  fun ref _set_target_id_router(state_name: String, t: TargetIdRouter) =>
+  fun ref _set_target_id_router(state_name: StateName, t: TargetIdRouter) =>
     var new_router = t.update_boundaries(_outgoing_boundaries)
     for id in new_router.stateless_partition_ids().values() do
       try
@@ -271,7 +275,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be register_remote_source(sender: String, source_id: RoutingId) =>
+  be register_remote_source(sender: WorkerName, source_id: RoutingId) =>
     None
 
   be register_source_listener(source_listener: SourceListener) =>
@@ -283,8 +287,13 @@ actor RouterRegistry
     if _waiting_to_finish_join and
       (_control_channel_listeners.size() != 0)
     then
-      _inform_contacted_worker_of_initialization()
-      _waiting_to_finish_join = false
+      match _joining_state_routing_ids
+      | let sri: Map[StateName, RoutingId] val =>
+        _inform_contacted_worker_of_initialization(sri)
+        _waiting_to_finish_join = false
+      else
+        Fail()
+      end
     end
 
   be register_control_channel_listener(cchl: TCPListener) =>
@@ -292,20 +301,25 @@ actor RouterRegistry
     if _waiting_to_finish_join and
       (_data_channel_listeners.size() != 0)
     then
-      _inform_contacted_worker_of_initialization()
-      _waiting_to_finish_join = false
+      match _joining_state_routing_ids
+      | let sri: Map[StateName, RoutingId] val =>
+        _inform_contacted_worker_of_initialization(sri)
+        _waiting_to_finish_join = false
+      else
+        Fail()
+      end
     end
 
   be register_data_channel(dc: DataChannel) =>
     // TODO: These need to be unregistered if they close
     _data_channels.set(dc)
 
-  be register_partition_router_subscriber(state_name: String,
+  be register_partition_router_subscriber(state_name: StateName,
     sub: _RouterSub)
   =>
     _register_partition_router_subscriber(state_name, sub)
 
-  fun ref _register_partition_router_subscriber(state_name: String,
+  fun ref _register_partition_router_subscriber(state_name: StateName,
     sub: _RouterSub)
   =>
     try
@@ -316,7 +330,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be unregister_partition_router_subscriber(state_name: String,
+  be unregister_partition_router_subscriber(state_name: StateName,
     sub: _RouterSub)
   =>
     Invariant(_partition_router_subs.contains(state_name))
@@ -356,12 +370,12 @@ actor RouterRegistry
       Fail()
     end
 
-  be register_target_id_router_updatable(state_name: String,
+  be register_target_id_router_updatable(state_name: StateName,
     sub: _TargetIdRouterUpdatable)
   =>
     _register_target_id_router_updatable(state_name, sub)
 
-  fun ref _register_target_id_router_updatable(state_name: String,
+  fun ref _register_target_id_router_updatable(state_name: StateName,
     sub: _TargetIdRouterUpdatable)
   =>
     try
@@ -380,18 +394,18 @@ actor RouterRegistry
       end
     end
 
-  be register_boundaries(bs: Map[String, OutgoingBoundary] val,
-    bbs: Map[String, OutgoingBoundaryBuilder] val)
+  be register_boundaries(bs: Map[WorkerName, OutgoingBoundary] val,
+    bbs: Map[WorkerName, OutgoingBoundaryBuilder] val)
   =>
     // Boundaries
-    let new_boundaries = recover trn Map[String, OutgoingBoundary] end
+    let new_boundaries = recover trn Map[WorkerName, OutgoingBoundary] end
     for (worker, boundary) in bs.pairs() do
       if not _outgoing_boundaries.contains(worker) then
         _outgoing_boundaries(worker) = boundary
         new_boundaries(worker) = boundary
       end
     end
-    let new_boundaries_sendable: Map[String, OutgoingBoundary] val =
+    let new_boundaries_sendable: Map[WorkerName, OutgoingBoundary] val =
       consume new_boundaries
 
     for producers in _partition_router_subs.values() do
@@ -423,7 +437,7 @@ actor RouterRegistry
 
     // Boundary builders
     let new_boundary_builders =
-      recover trn Map[String, OutgoingBoundaryBuilder] end
+      recover trn Map[WorkerName, OutgoingBoundaryBuilder] end
     for (worker, builder) in bbs.pairs() do
       // Boundary builders should always be registered after the canonical
       // boundary for each builder. The canonical is used on all Steps.
@@ -439,7 +453,7 @@ actor RouterRegistry
     end
 
     let new_boundary_builders_sendable:
-      Map[String, OutgoingBoundaryBuilder] val =
+      Map[WorkerName, OutgoingBoundaryBuilder] val =
         consume new_boundary_builders
 
     for source_listener in _source_listeners.values() do
@@ -480,7 +494,7 @@ actor RouterRegistry
   fun _distribute_data_router() =>
     _data_receivers.update_data_router(_data_router)
 
-  fun ref _distribute_target_id_router(state_name: String) =>
+  fun ref _distribute_target_id_router(state_name: StateName) =>
     """
     Distribute the TargetIdRouter used by state steps corresponding to state
     name.
@@ -560,7 +574,7 @@ actor RouterRegistry
       end
     end
 
-  fun ref _remove_worker(worker: String) =>
+  fun ref _remove_worker(worker: WorkerName) =>
     try
       _data_receiver_map.remove(worker)?
     else
@@ -568,7 +582,7 @@ actor RouterRegistry
     end
     _distribute_boundary_removal(worker)
 
-  fun ref _distribute_boundary_removal(worker: String) =>
+  fun ref _distribute_boundary_removal(worker: WorkerName) =>
     for subs in _partition_router_subs.values() do
       for sub in subs.values() do
         match sub
@@ -618,10 +632,10 @@ actor RouterRegistry
       source_listener.update_boundary_builders(boundary_builders_to_send)
     end
 
-  be create_partition_routers_from_blueprints(workers: Array[String] val,
-    partition_blueprints: Map[String, PartitionRouterBlueprint] val)
+  be create_partition_routers_from_blueprints(workers: Array[WorkerName] val,
+    partition_blueprints: Map[StateName, PartitionRouterBlueprint] val)
   =>
-    let obs_trn = recover trn Map[String, OutgoingBoundary] end
+    let obs_trn = recover trn Map[WorkerName, OutgoingBoundary] end
     for (w, ob) in _outgoing_boundaries.pairs() do
       obs_trn(w) = ob
     end
@@ -713,7 +727,7 @@ actor RouterRegistry
     _connections.stop_the_world(exclusions)
 
   fun ref initiate_stop_the_world_for_grow_migration(
-    new_workers: Array[String] val)
+    new_workers: Array[WorkerName] val)
   =>
     _initiated_stop_the_world = true
     try
@@ -860,7 +874,7 @@ actor RouterRegistry
   /////////////////////////////////////////////////////////////////////////////
   // JOINING WORKER
   /////////////////////////////////////////////////////////////////////////////
-  be worker_join(conn: TCPConnection, worker: String,
+  be worker_join(conn: TCPConnection, worker: WorkerName,
     worker_count: USize, local_topology: LocalTopology,
     current_worker_count: USize)
   =>
@@ -871,18 +885,47 @@ actor RouterRegistry
       Fail()
     end
 
-  be connect_to_joining_workers(ws: Array[String] val, coordinator: String) =>
+  be connect_to_joining_workers(ws: Array[WorkerName] val,
+    new_state_routing_ids: Map[WorkerName, Map[StateName, RoutingId] val] val,
+    coordinator: WorkerName)
+  =>
+    for w in ws.values() do
+      try
+        _update_state_routing_ids(w, new_state_routing_ids(w)?)
+      else
+        Fail()
+      end
+    end
     try
       (_autoscale as Autoscale).connect_to_joining_workers(ws, coordinator)
     else
       Fail()
     end
 
-  be joining_worker_initialized(worker: String) =>
+  be joining_worker_initialized(worker: WorkerName,
+    state_routing_ids: Map[StateName, RoutingId] val)
+  =>
+    _update_state_routing_ids(worker, state_routing_ids)
     try
-      (_autoscale as Autoscale).joining_worker_initialized(worker)
+      (_autoscale as Autoscale).joining_worker_initialized(worker,
+        state_routing_ids)
     else
       Fail()
+    end
+
+  fun ref _update_state_routing_ids(worker: WorkerName,
+    state_routing_ids: Map[StateName, RoutingId] val)
+  =>
+    for (state_name, id) in state_routing_ids.pairs() do
+      try
+        let new_state_routing_id = state_routing_ids(state_name)?
+        let new_router = _partition_routers(state_name)?
+          .add_state_routing_id(worker, new_state_routing_id)
+        _partition_routers(state_name) = new_router
+        _distribute_partition_router(new_router)
+      else
+        Fail()
+      end
     end
 
   fun inform_joining_worker(conn: TCPConnection, worker: WorkerName,
@@ -910,16 +953,21 @@ actor RouterRegistry
       _initializer_name, consume state_blueprints,
       consume stateless_blueprints, consume tidr_blueprints)
 
-  be inform_contacted_worker_of_initialization() =>
-    _inform_contacted_worker_of_initialization()
+  be inform_contacted_worker_of_initialization(
+    state_routing_ids: Map[StateName, RoutingId] val)
+  =>
+    _inform_contacted_worker_of_initialization(state_routing_ids)
 
-  fun ref _inform_contacted_worker_of_initialization() =>
+  fun ref _inform_contacted_worker_of_initialization(
+    state_routing_ids: Map[StateName, RoutingId] val)
+  =>
     match _contacted_worker
     | let cw: String =>
       if (_data_channel_listeners.size() != 0) and
          (_control_channel_listeners.size() != 0)
       then
-        _connections.inform_contacted_worker_of_initialization(cw)
+        _connections.inform_contacted_worker_of_initialization(cw,
+          state_routing_ids)
       else
         _waiting_to_finish_join = true
       end
@@ -927,12 +975,12 @@ actor RouterRegistry
       Fail()
     end
 
-  be inform_worker_of_boundary_count(target_worker: String) =>
+  be inform_worker_of_boundary_count(target_worker: WorkerName) =>
     // There is one boundary per source plus the canonical boundary
     let count = _sources.size() + 1
     _connections.inform_worker_of_boundary_count(target_worker, count)
 
-  be reconnect_source_boundaries(target_worker: String) =>
+  be reconnect_source_boundaries(target_worker: WorkerName) =>
     for source in _sources.values() do
       source.reconnect_boundary(target_worker)
     end
@@ -940,7 +988,7 @@ actor RouterRegistry
   /////////////////////////////////////////////////////////////////////////////
   // NEW WORKER PARTITION MIGRATION
   /////////////////////////////////////////////////////////////////////////////
-  be report_connected_to_joining_worker(connected_worker: String) =>
+  be report_connected_to_joining_worker(connected_worker: WorkerName) =>
     try
       (_autoscale as Autoscale).worker_connected_to_joining_workers(
         connected_worker)
@@ -949,7 +997,7 @@ actor RouterRegistry
     end
 
   be remote_stop_the_world_for_join_migration_request(
-    joining_workers: Array[String] val)
+    joining_workers: Array[WorkerName] val)
   =>
     """
     Only one worker is contacted by all joining workers to indicate that a
@@ -965,7 +1013,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be remote_join_migration_request(joining_workers: Array[String] val,
+  be remote_join_migration_request(joining_workers: Array[WorkerName] val,
     snapshot_id: SnapshotId)
   =>
     """
@@ -975,7 +1023,8 @@ actor RouterRegistry
     migration to the joining workers as well. This behavior is called when
     that message is received.
     """
-    if not ArrayHelpers[String].contains[String](joining_workers, _worker_name)
+    if not ArrayHelpers[WorkerName].contains[WorkerName](joining_workers,
+      _worker_name)
     then
       try
         (_autoscale as Autoscale).join_migration_initiated(joining_workers,
@@ -1001,7 +1050,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be prepare_join_migration(target_workers: Array[String] val) =>
+  be prepare_join_migration(target_workers: Array[WorkerName] val) =>
     @printf[I32]("!@ prepare_join_migration\n".cstring())
 
     let lookup_next_snapshot_id = Promise[SnapshotId]
@@ -1009,7 +1058,7 @@ actor RouterRegistry
       _self~initiate_join_migration(target_workers))
     _snapshot_initiator.lookup_next_snapshot_id(lookup_next_snapshot_id)
 
-  be initiate_join_migration(target_workers: Array[String] val,
+  be initiate_join_migration(target_workers: Array[WorkerName] val,
     next_snapshot_id: SnapshotId)
   =>
     @printf[I32]("!@ initiate_join_migration\n".cstring())
@@ -1031,7 +1080,7 @@ actor RouterRegistry
     end
     begin_join_migration(target_workers, next_snapshot_id)
 
-  fun ref begin_join_migration(target_workers: Array[String] val,
+  fun ref begin_join_migration(target_workers: Array[WorkerName] val,
     next_snapshot_id: SnapshotId)
   =>
     """
@@ -1073,7 +1122,7 @@ actor RouterRegistry
       end
     end
 
-  fun send_migration_batch_complete_msg(target: String) =>
+  fun send_migration_batch_complete_msg(target: WorkerName) =>
     """
     Inform migration target that the entire migration batch has been sent.
     """
@@ -1083,7 +1132,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be process_migrating_target_ack(target: String) =>
+  be process_migrating_target_ack(target: WorkerName) =>
     """
     Called when we receive a migration batch ack from the new worker
     (i.e. migration target) indicating it's ready to receive data messages
@@ -1096,11 +1145,11 @@ actor RouterRegistry
       Fail()
     end
 
-  fun ref all_join_migration_acks_received(joining_workers: Array[String] val,
-    is_coordinator: Bool)
+  fun ref all_join_migration_acks_received(
+    joining_workers: Array[WorkerName] val, is_coordinator: Bool)
   =>
     if is_coordinator then
-      let hash_partitions_trn = recover trn Map[String, HashPartitions] end
+      let hash_partitions_trn = recover trn Map[StateName, HashPartitions] end
       for (state_name, pr) in _partition_routers.pairs() do
         hash_partitions_trn(state_name) = pr.hash_partitions()
       end
@@ -1118,8 +1167,9 @@ actor RouterRegistry
     _connections.request_cluster_unmute()
     _unmute_request(_worker_name)
 
-  be update_partition_routers_after_grow(joining_workers: Array[String] val,
-    hash_partitions: Map[String, HashPartitions] val)
+  be update_partition_routers_after_grow(
+    joining_workers: Array[WorkerName] val,
+    hash_partitions: Map[StateName, HashPartitions] val)
   =>
     """
     Called on joining workers after migration is complete and they've been
@@ -1136,15 +1186,15 @@ actor RouterRegistry
       end
     end
 
-  be ack_migration_batch_complete(sender_name: String) =>
+  be ack_migration_batch_complete(sender_name: WorkerName) =>
     """
     Called when a new (joining) worker needs to ack to worker sender_name that
     it's ready to start receiving messages after migration
     """
     _connections.ack_migration_batch_complete(sender_name)
 
-  fun ref _migrate_partition_steps(state_name: String,
-    target_workers: Array[String] val, next_snapshot_id: SnapshotId): Bool
+  fun ref _migrate_partition_steps(state_name: StateName,
+    target_workers: Array[WorkerName] val, next_snapshot_id: SnapshotId): Bool
   =>
     """
     Called to initiate migrating partition steps to a target worker in order
@@ -1157,9 +1207,9 @@ actor RouterRegistry
       end
 
       let sorted_target_workers =
-        ArrayHelpers[String].sorted[String](target_workers)
+        ArrayHelpers[WorkerName].sorted[WorkerName](target_workers)
 
-      let tws = recover trn Array[(String, OutgoingBoundary)] end
+      let tws = recover trn Array[(WorkerName, OutgoingBoundary)] end
       for w in sorted_target_workers.values() do
         let boundary = _outgoing_boundaries(w)?
         tws.push((w, boundary))
@@ -1181,9 +1231,9 @@ actor RouterRegistry
       false
     end
 
-  fun ref _migrate_all_partition_steps(state_name: String,
-    target_workers: Array[(String, OutgoingBoundary)] val,
-    leaving_workers: Array[String] val): Bool
+  fun ref _migrate_all_partition_steps(state_name: StateName,
+    target_workers: Array[(WorkerName, OutgoingBoundary)] val,
+    leaving_workers: Array[WorkerName] val): Bool
   =>
     """
     Called to initiate migrating all partition steps the set of remaining
@@ -1206,8 +1256,8 @@ actor RouterRegistry
   /////////////////////////////////////////////////////////////////////////////
   // SHRINK TO FIT
   /////////////////////////////////////////////////////////////////////////////
-  be initiate_shrink(remaining_workers: Array[String] val,
-    leaving_workers: Array[String] val)
+  be initiate_shrink(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     """
     This should only be called on the worker contacted via an external
@@ -1219,7 +1269,8 @@ actor RouterRegistry
     else
       Fail()
     end
-    if ArrayHelpers[String].contains[String](leaving_workers, _worker_name)
+    if ArrayHelpers[WorkerName].contains[WorkerName](leaving_workers,
+      _worker_name)
     then
       // Since we're one of the leaving workers, we're handing off
       // responsibility for the shrink to one of the remaining workers.
@@ -1261,8 +1312,8 @@ actor RouterRegistry
       _autoscale_initiator.initiate_autoscale(action)
     end
 
-  be prepare_shrink(remaining_workers: Array[String] val,
-    leaving_workers: Array[String] val)
+  be prepare_shrink(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     """
     One worker is contacted via external message to begin autoscale
@@ -1278,8 +1329,8 @@ actor RouterRegistry
     end
     _prepare_shrink(remaining_workers, leaving_workers)
 
-  fun ref _prepare_shrink(remaining_workers: Array[String] val,
-    leaving_workers: Array[String] val)
+  fun ref _prepare_shrink(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     if not _stop_the_world_in_process then
       _stop_the_world_for_shrink_migration()
@@ -1291,8 +1342,8 @@ actor RouterRegistry
       _stateless_partition_routers(p_id) = new_router
     end
 
-  be begin_leaving_migration(remaining_workers: Array[String] val,
-    leaving_workers: Array[String] val)
+  be begin_leaving_migration(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     """
     This should only be called on a worker designated to leave the cluster
@@ -1317,7 +1368,7 @@ actor RouterRegistry
     end
 
     let sorted_remaining_workers =
-      ArrayHelpers[String].sorted[String](remaining_workers)
+      ArrayHelpers[WorkerName].sorted[WorkerName](remaining_workers)
 
     let rws_trn = recover trn Array[(String, OutgoingBoundary)] end
     for w in sorted_remaining_workers.values() do
@@ -1346,8 +1397,8 @@ actor RouterRegistry
       try_to_resume_processing_immediately()
     end
 
-  be announce_leaving_migration(remaining_workers: Array[String] val,
-    leaving_workers: Array[String] val)
+  be announce_leaving_migration(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     try
       let msg = ChannelMsgEncoder.begin_leaving_migration(remaining_workers,
@@ -1364,7 +1415,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be disconnect_from_leaving_worker(worker: String) =>
+  be disconnect_from_leaving_worker(worker: WorkerName) =>
     _connections.disconnect_from(worker)
     try
       _remove_worker(worker)
@@ -1395,14 +1446,15 @@ actor RouterRegistry
       Fail()
     end
 
-  be receive_leaving_migration_ack(worker: String) =>
+  be receive_leaving_migration_ack(worker: WorkerName) =>
     try
       (_autoscale as Autoscale).receive_leaving_migration_ack(worker)
     else
       Fail()
     end
 
-  fun ref all_leaving_workers_finished(leaving_workers: Array[String] val) =>
+  fun ref all_leaving_workers_finished(leaving_workers: Array[WorkerName] val)
+  =>
     for w in leaving_workers.values() do
       _barrier_initiator.remove_worker(w)
       _snapshot_initiator.remove_worker(w)
@@ -1450,7 +1502,7 @@ actor RouterRegistry
     end
 
   be add_state_proxy(id: RoutingId, proxy_address: ProxyAddress, key: Key,
-    state_name: String)
+    state_name: StateName)
   =>
     """
     Called when a stateful step has been added to another worker
@@ -1458,7 +1510,7 @@ actor RouterRegistry
     //!@
     // _add_proxy_to_target_id_router(id, proxy_address)
 
-  fun ref _remove_step_from_data_router(state_name: String, key: Key) =>
+  fun ref _remove_step_from_data_router(state_name: StateName, key: Key) =>
     let new_data_router = _data_router.remove_keyed_route(state_name, key)
     _data_router = new_data_router
     _distribute_data_router()
@@ -1481,7 +1533,7 @@ actor RouterRegistry
     runner_builder: RunnerBuilder, reporter: MetricsReporter iso,
     recovery_replayer: RecoveryReconnecter, msg: StepMigrationMsg)
   =>
-    let outgoing_boundaries = recover iso Map[String, OutgoingBoundary] end
+    let outgoing_boundaries = recover iso Map[WorkerName, OutgoingBoundary] end
     for (k, v) in _outgoing_boundaries.pairs() do
       outgoing_boundaries(k) = v
     end
@@ -1505,7 +1557,7 @@ actor RouterRegistry
     end
 
   fun ref move_proxy_to_stateful_step(id: RoutingId, target: Consumer,
-    key: Key, state_name: String, source_worker: String)
+    key: Key, state_name: StateName, source_worker: WorkerName)
   =>
     """
     Called when a stateful step has been migrated to this worker from another
@@ -1516,7 +1568,7 @@ actor RouterRegistry
       recover [source_worker] end)
 
   fun ref _add_routes_to_state_step(id: RoutingId, target: Consumer, key: Key,
-    state_name: String)
+    state_name: StateName)
   =>
     try
       match target
@@ -1536,7 +1588,8 @@ actor RouterRegistry
     end
     _move_proxy_to_step(id, target)
 
-  fun ref _move_proxy_to_step(id: U128, target: Consumer)
+  //!@
+  fun ref _move_proxy_to_step(id: RoutingId, target: Consumer)
   =>
     """
     Called when a step has been migrated to this worker from another worker
@@ -1551,7 +1604,8 @@ actor RouterRegistry
     // end
 
   //!@
-  fun ref _outgoing_boundaries_sorted(): Array[(String, OutgoingBoundary)] val
+  fun ref _outgoing_boundaries_sorted():
+    Array[(WorkerName, OutgoingBoundary)] val
   =>
     let keys = Array[String]
     for k in _outgoing_boundaries.keys() do
@@ -1587,7 +1641,7 @@ actor RouterRegistry
     let msg = ExternalMsgEncoder.cluster_status_query_reponse_not_initialized()
     conn.writev(msg)
 
-  be cluster_status_query(worker_names: Array[String] val,
+  be cluster_status_query(worker_names: Array[WorkerName] val,
     conn: TCPConnection)
   =>
     let msg = ExternalMsgEncoder.cluster_status_query_response(
