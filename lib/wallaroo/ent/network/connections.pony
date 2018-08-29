@@ -364,25 +364,26 @@ actor Connections is Cluster
       Fail()
     end
 
-  be create_boundary_to_joining_worker(target: String, boundary_id: U128,
-    state_routing_ids: Map[StateName, RoutingId] val,
-    local_topology_initializer: LocalTopologyInitializer)
-  =>
-    try
-      (let host, let service) = _data_addrs(target)?
-      let reporter = MetricsReporter(_app_name,
-        _worker_name, _metrics_conn)
-      let builder = OutgoingBoundaryBuilder(_auth, _worker_name,
-        consume reporter, host, service, _spike_config)
-      let boundary = builder.build_and_initialize(boundary_id, target,
-        local_topology_initializer)
-      _register_disposable(boundary)
-      local_topology_initializer.add_boundary_to_joining_worker(target,
-        boundary, builder, state_routing_ids)
-    else
-      @printf[I32]("Can't find data address for worker\n".cstring())
-      Fail()
-    end
+//!@
+  // be create_boundary_to_joining_worker(target: String, boundary_id: U128,
+  //   state_routing_ids: Map[StateName, RoutingId] val,
+  //   local_topology_initializer: LocalTopologyInitializer)
+  // =>
+  //   try
+  //     (let host, let service) = _data_addrs(target)?
+  //     let reporter = MetricsReporter(_app_name,
+  //       _worker_name, _metrics_conn)
+  //     let builder = OutgoingBoundaryBuilder(_auth, _worker_name,
+  //       consume reporter, host, service, _spike_config)
+  //     let boundary = builder.build_and_initialize(boundary_id, target,
+  //       local_topology_initializer)
+  //     _register_disposable(boundary)
+  //     local_topology_initializer.add_boundary_to_joining_worker(target,
+  //       boundary, builder, state_routing_ids)
+  //   else
+  //     @printf[I32]("Can't find data address for worker\n".cstring())
+  //     Fail()
+  //   end
 
   // TODO: Passing in snapshot target here is a hack because we currently
   // do recovery initialization at the point boundary updates are complete.
@@ -645,18 +646,22 @@ actor Connections is Cluster
     _register_disposable(outgoing_boundary)
     _data_conns(target_name) = outgoing_boundary
 
-  be create_data_connection_to_joining_worker(target_name: String,
-    host: String, service: String, li: LayoutInitializer)
+  be create_data_connection_to_joining_worker(target_name: WorkerName,
+    host: String, service: String, new_boundary_id: RoutingId,
+    state_routing_ids: Map[StateName, RoutingId] val,
+    lti: LocalTopologyInitializer)
   =>
     _data_addrs(target_name) = (host, service)
+    let reporter = MetricsReporter(_app_name, _worker_name, _metrics_conn)
     let boundary_builder = OutgoingBoundaryBuilder(_auth, _worker_name,
-      MetricsReporter(_app_name, _worker_name, _metrics_conn), host, service,
-      _spike_config)
+      consume reporter, host, service, _spike_config)
     let outgoing_boundary =
-      boundary_builder.build_and_initialize(_routing_id_gen(), target_name, li)
+      boundary_builder.build_and_initialize(new_boundary_id, target_name, lti)
     _data_conn_builders(target_name) = boundary_builder
     _register_disposable(outgoing_boundary)
     _data_conns(target_name) = outgoing_boundary
+    lti.add_boundary_to_joining_worker(target_name, outgoing_boundary,
+      boundary_builder, state_routing_ids)
 
   be update_boundary_ids(boundary_ids: Map[String, RoutingId] val) =>
     for (worker, boundary) in _data_conns.pairs() do

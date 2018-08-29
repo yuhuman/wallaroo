@@ -385,6 +385,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         Fail()
       end
     end
+    _save_local_topology()
 
   be add_joining_worker(w: String, joining_host: String,
     control_addr: (String, String), data_addr: (String, String),
@@ -392,6 +393,7 @@ actor LocalTopologyInitializer is LayoutInitializer
   =>
     _add_joining_worker(w, joining_host, control_addr, data_addr,
       state_routing_ids)
+    _save_local_topology()
 
   fun ref _add_joining_worker(w: String, joining_host: String,
     control_addr: (String, String), data_addr: (String, String),
@@ -404,11 +406,13 @@ actor LocalTopologyInitializer is LayoutInitializer
         @printf[I32]("!@ Added worker %s to LocalTopology\n".cstring(), w.cstring())
         _connections.create_control_connection(w, joining_host,
           control_addr._2)
-        _connections.create_data_connection_to_joining_worker(w, joining_host,
-          data_addr._2, this)
         let new_boundary_id = _routing_id_gen()
-        _connections.create_boundary_to_joining_worker(w, new_boundary_id,
-          state_routing_ids, this)
+        _connections.create_data_connection_to_joining_worker(w,
+          joining_host, data_addr._2, new_boundary_id, state_routing_ids, this)
+        _connections.save_connections()
+        //!@
+        // _connections.create_boundary_to_joining_worker(w, new_boundary_id,
+          // state_routing_ids, this)
         _topology = updated_topology.add_state_routing_ids(w,
           state_routing_ids)
         @printf[I32]("***New worker %s added to cluster!***\n".cstring(),
