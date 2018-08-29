@@ -1397,6 +1397,7 @@ class val LocalPartitionRouter[In: Any val, S: State ref]
     end
     for (w, hpr) in _hashed_node_routes.pairs() do
       try
+        @printf[I32]("!@ Looking up state routing ids for %s\n".cstring(), w.cstring())
         m(_state_routing_ids(w)?) = hpr.target_boundary()
       else
         Fail()

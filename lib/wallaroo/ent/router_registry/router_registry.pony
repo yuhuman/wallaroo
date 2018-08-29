@@ -272,7 +272,10 @@ actor RouterRegistry
        _connections.register_disposable(source)
       // _connections.notify_cluster_of_source_leaving(source_id)
     else
-      Fail()
+      ifdef debug then
+        @printf[I32]("Couldn't find Source %s to unregister\n".cstring(),
+          source_id.string().cstring())
+      end
     end
 
   be register_remote_source(sender: WorkerName, source_id: RoutingId) =>
