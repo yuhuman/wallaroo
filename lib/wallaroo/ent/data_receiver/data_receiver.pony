@@ -369,7 +369,7 @@ actor DataReceiver is (Producer & Rerouter)
   =>
     @printf[I32]("!@ DataReceiver: forward_barrier -> seq id %s, last_seen: %s\n".cstring(), seq_id.string().cstring(), _last_id_seen.string().cstring())
     if seq_id > _last_id_seen then
-      @printf[I32]("!@ DataReceiver: received token %s from %s\n".cstring(), barrier_token.string().cstring(), origin_step_id.string().cstring())
+      @printf[I32]("!@ DataReceiver: received token %s from %s at DataReceiver %s\n".cstring(), barrier_token.string().cstring(), origin_step_id.string().cstring(), _id.string().cstring())
       match barrier_token
       | let srt: SnapshotRollbackBarrierToken =>
         _pending_message_store.clear()
