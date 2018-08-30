@@ -262,11 +262,11 @@ actor OutgoingBoundary is Consumer
     @printf[I32]("!@ reconnect() RE-Connecting OutgoingBoundary %s to %s:%s on %s\n".cstring(), _step_id.string().cstring(), _host.cstring(), _service.cstring(), _target_worker.cstring())
 
   be migrate_step(step_id: RoutingId, state_name: String, key: Key,
-    state: ByteSeq val)
+    snapshot_id: SnapshotId, state: ByteSeq val)
   =>
     try
       let outgoing_msg = ChannelMsgEncoder.migrate_step(step_id,
-        state_name, key, state, _worker_name, _auth)?
+        state_name, key, snapshot_id, state, _worker_name, _auth)?
       _writev(outgoing_msg)
     else
       Fail()
@@ -403,6 +403,10 @@ actor OutgoingBoundary is Consumer
     _maybe_mute_or_unmute_upstreams()
 
   fun ref _replay_from(idx: SeqId) =>
+    // In case the downstream has failed and recovered, resend producer
+    // registrations.
+    resend_producer_registrations()
+
     try
       var cur_id = _lowest_queue_id
       for msg in _queue.values() do
@@ -522,6 +526,7 @@ actor OutgoingBoundary is Consumer
     _upstreams.unset(producer)
 
   fun ref resend_producer_registrations() =>
+    @printf[I32]("!@ resend_producer_registrations\n".cstring())
     for (producer_id, producer, target_id) in
       _registered_producers.registrations().values()
     do

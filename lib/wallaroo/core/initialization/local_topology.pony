@@ -658,6 +658,7 @@ actor LocalTopologyInitializer is LayoutInitializer
     @printf[I32]("Rolling back topology graph.\n".cstring())
     let local_keys = _local_keys_file.read_local_keys_and_truncate(
       snapshot_id)
+    @printf[I32]("!@ Found %s collection of local keys to rollback to.\n".cstring(), local_keys.size().string().cstring())
     _router_registry.rollback_state_steps(local_keys, action)
 
   be recover_and_initialize(ws: Array[String] val,
@@ -700,7 +701,11 @@ actor LocalTopologyInitializer is LayoutInitializer
     // snapshot.
     match snapshot_id
     | let s_id: SnapshotId =>
+      @printf[I32]("!@ register_state_step writing to local keys!!!\n".cstring())
       _local_keys_file.add_key(state_name, key, r_id, s_id)
+    //!@
+    else
+      @printf[I32]("!@ register_state_step no snapshot id!!! No local keys write\n".cstring())
     end
 
   be unregister_state_step(state_name: StateName, key: Key,
