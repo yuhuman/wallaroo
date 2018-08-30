@@ -307,14 +307,6 @@ actor Connections is Cluster
     recover Array[String] end)
   =>
     try
-      let new_step_msg = ChannelMsgEncoder.announce_new_stateful_step(id,
-        _worker_name, key, state_name, _auth)?
-      for (target, ch) in _control_conns.pairs() do
-        // Only send to workers that don't already know about this step
-        if not exclusions.contains(target) then
-          ch.writev(new_step_msg)
-        end
-      end
       let migration_complete_msg =
         ChannelMsgEncoder.step_migration_complete(id, _auth)?
       for producer in exclusions.values() do

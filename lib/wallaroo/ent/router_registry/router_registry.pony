@@ -473,6 +473,11 @@ actor RouterRegistry
   be register_state_step(step: Step, state_name: StateName, key: Key,
     step_id: RoutingId, snapshot_id: (SnapshotId | None) = None)
   =>
+    _register_state_step(step, state_name, key, step_id, snapshot_id)
+
+  fun ref _register_state_step(step: Step, state_name: StateName, key: Key,
+    step_id: RoutingId, snapshot_id: (SnapshotId | None) = None)
+  =>
     @printf[I32]("!@ RouterRegistry: register_state_step, key: %s\n".cstring(), key.cstring())
     try
       (_local_topology_initializer as LocalTopologyInitializer)
@@ -482,8 +487,13 @@ actor RouterRegistry
     end
     _add_routes_to_state_step(step_id, step, key, state_name)
 
-  be unregister_state_step(state_name: StateName, key: Key, id: RoutingId,
+  be unregister_state_step(state_name: StateName, key: Key, step_id: RoutingId,
     step: Step, snapshot_id: (SnapshotId | None) = None)
+  =>
+    _unregister_state_step(state_name, key, step_id, step, snapshot_id)
+
+  fun ref _unregister_state_step(state_name: StateName, key: Key,
+    id: RoutingId, step: Step, snapshot_id: (SnapshotId | None) = None)
   =>
     @printf[I32]("!@ RouterRegistry: unregister_state_step, key: %s\n".cstring(), key.cstring())
     try
@@ -1236,7 +1246,8 @@ actor RouterRegistry
 
   fun ref _migrate_all_partition_steps(state_name: StateName,
     target_workers: Array[(WorkerName, OutgoingBoundary)] val,
-    leaving_workers: Array[WorkerName] val): Bool
+    leaving_workers: Array[WorkerName] val,
+    next_snapshot_id: SnapshotId): Bool
   =>
     """
     Called to initiate migrating all partition steps the set of remaining
@@ -1247,7 +1258,7 @@ actor RouterRegistry
         .cstring(), state_name.cstring(), target_workers.size())
       let partition_router = _partition_routers(state_name)?
       partition_router.rebalance_steps_shrink(target_workers, leaving_workers,
-        this)
+        this, next_snapshot_id)
     else
       Fail()
       false
@@ -1345,8 +1356,16 @@ actor RouterRegistry
       _stateless_partition_routers(p_id) = new_router
     end
 
-  be begin_leaving_migration(remaining_workers: Array[WorkerName] val,
+  be prepare_leaving_migration(remaining_workers: Array[WorkerName] val,
     leaving_workers: Array[WorkerName] val)
+  =>
+    let lookup_next_snapshot_id = Promise[SnapshotId]
+    lookup_next_snapshot_id.next[None](
+      _self~begin_leaving_migration(remaining_workers, leaving_workers))
+    _snapshot_initiator.lookup_next_snapshot_id(lookup_next_snapshot_id)
+
+  be begin_leaving_migration(remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val, next_snapshot_id: SnapshotId)
   =>
     """
     This should only be called on a worker designated to leave the cluster
@@ -1391,7 +1410,8 @@ actor RouterRegistry
     var had_steps_to_migrate = false
     for state_name in _partition_routers.keys() do
       let steps_to_migrate_for_this_state =
-        _migrate_all_partition_steps(state_name, rws, leaving_workers)
+        _migrate_all_partition_steps(state_name, rws, leaving_workers,
+          next_snapshot_id)
       if steps_to_migrate_for_this_state then
         had_steps_to_migrate = true
       end
@@ -1504,15 +1524,6 @@ actor RouterRegistry
       Fail()
     end
 
-  be add_state_proxy(id: RoutingId, proxy_address: ProxyAddress, key: Key,
-    state_name: StateName)
-  =>
-    """
-    Called when a stateful step has been added to another worker
-    """
-    //!@
-    // _add_proxy_to_target_id_router(id, proxy_address)
-
   fun ref _remove_step_from_data_router(state_name: StateName, key: Key) =>
     let new_data_router = _data_router.remove_keyed_route(state_name, key)
     _data_router = new_data_router
@@ -1559,14 +1570,15 @@ actor RouterRegistry
       Fail()
     end
 
-  fun ref move_proxy_to_stateful_step(id: RoutingId, target: Consumer,
-    key: Key, state_name: StateName, source_worker: WorkerName)
+  fun ref move_proxy_to_stateful_step(id: RoutingId, step: Step,
+    key: Key, state_name: StateName, source_worker: WorkerName,
+    snapshot_id: SnapshotId)
   =>
     """
     Called when a stateful step has been migrated to this worker from another
     worker
     """
-    _add_routes_to_state_step(id, target, key, state_name)
+    _register_state_step(step, state_name, key, id, snapshot_id)
     _connections.notify_cluster_of_new_stateful_step(id, key, state_name,
       recover [source_worker] end)
 

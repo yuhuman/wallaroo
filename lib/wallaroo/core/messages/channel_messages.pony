@@ -53,11 +53,11 @@ primitive ChannelMsgEncoder
       metrics_id, metric_name), auth, wb)?
 
   fun migrate_step(step_id: RoutingId, state_name: String, key: Key,
-    state: ByteSeq val, worker: String, auth: AmbientAuth):
-    Array[ByteSeq] val ?
+    snapshot_id: SnapshotId, state: ByteSeq val, worker: String,
+    auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(KeyedStepMigrationMsg(step_id, state_name, key, state, worker),
-      auth)?
+    _encode(KeyedStepMigrationMsg(step_id, state_name, key, snapshot_id, state,
+      worker), auth)?
 
   fun migration_batch_complete(sender: String,
     auth: AmbientAuth): Array[ByteSeq] val ?
@@ -386,17 +386,6 @@ primitive ChannelMsgEncoder
     """
     _encode(ConnectedToJoiningWorkersMsg(sender), auth)?
 
-  fun announce_new_stateful_step(id: RoutingId, worker_name: String, key: Key,
-    state_name: String, auth: AmbientAuth): Array[ByteSeq] val ?
-  =>
-    """
-    This message is sent to notify another worker that a new stateful step
-    has been created on this worker and that partition routers should be
-    updated.
-    """
-    _encode(AnnounceNewStatefulStepMsg(id, worker_name, key,
-      state_name), auth)?
-
   fun announce_new_source(worker_name: String, id: RoutingId,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
@@ -709,37 +698,42 @@ class val ReplayCompleteMsg is ChannelMsg
 
 trait val StepMigrationMsg is ChannelMsg
   fun state_name(): String
-  fun step_id(): U128
+  fun step_id(): RoutingId
+  fun snapshot_id(): SnapshotId
   fun state(): ByteSeq val
   fun worker(): String
   fun update_router_registry(router_registry: RouterRegistry ref,
-    target: Consumer)
+    step: Step)
 
 class val KeyedStepMigrationMsg is StepMigrationMsg
   let _state_name: String
   let _key: Key
   let _step_id: RoutingId
+  // The next snapshot that this migrated step will be a part of
+  let _snapshot_id: SnapshotId
   let _state: ByteSeq val
   let _worker: String
 
   new val create(step_id': U128, state_name': String, key': Key,
-    state': ByteSeq val, worker': String)
+    snapshot_id': SnapshotId, state': ByteSeq val, worker': String)
   =>
     _state_name = state_name'
     _key = key'
     _step_id = step_id'
+    _snapshot_id = snapshot_id'
     _state = state'
     _worker = worker'
 
   fun state_name(): String => _state_name
-  fun step_id(): U128 => _step_id
+  fun step_id(): RoutingId => _step_id
+  fun snapshot_id(): SnapshotId => _snapshot_id
   fun state(): ByteSeq val => _state
   fun worker(): String => _worker
   fun update_router_registry(router_registry: RouterRegistry ref,
-    target: Consumer)
+    step: Step)
   =>
-    router_registry.move_proxy_to_stateful_step(_step_id, target, _key,
-      _state_name, _worker)
+    router_registry.move_proxy_to_stateful_step(_step_id, step, _key,
+      _state_name, _worker, _snapshot_id)
 
 class val MigrationBatchCompleteMsg is ChannelMsg
   let sender_name: String
@@ -1219,26 +1213,6 @@ class val ConnectedToJoiningWorkersMsg is ChannelMsg
 
   new val create(sender': String) =>
     sender = sender'
-
-class val AnnounceNewStatefulStepMsg is ChannelMsg
-  """
-  This message is sent to notify another worker that a new stateful step has
-  been created on this worker and that partition routers should be updated.
-  """
-  let _step_id: RoutingId
-  let _worker_name: String
-  let _key: Key
-  let _state_name: String
-
-  new val create(id: RoutingId, worker: String, k: Key, s_name: String) =>
-    _step_id = id
-    _worker_name = worker
-    _key = k
-    _state_name = s_name
-
-  fun update_registry(r: RouterRegistry) =>
-    r.add_state_proxy(_step_id, ProxyAddress(_worker_name, _step_id), _key,
-      _state_name)
 
 class val AnnounceNewSourceMsg is ChannelMsg
   """

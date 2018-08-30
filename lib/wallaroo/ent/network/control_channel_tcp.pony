@@ -343,8 +343,6 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           m.hash_partitions)
       | let m: ConnectedToJoiningWorkersMsg =>
         _router_registry.report_connected_to_joining_worker(m.sender)
-      | let m: AnnounceNewStatefulStepMsg =>
-        m.update_registry(_router_registry)
       | let m: AnnounceNewSourceMsg =>
         _router_registry.register_remote_source(m.sender, m.source_id)
       | let m: StepMigrationCompleteMsg =>
@@ -399,7 +397,7 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           @printf[I32](("Received BeginLeavingMigrationMsg on Control " +
             "Channel\n").cstring())
         end
-        _router_registry.begin_leaving_migration(m.remaining_workers,
+        _router_registry.prepare_leaving_migration(m.remaining_workers,
           m.leaving_workers)
       | let m: InitiateShrinkMsg =>
         match _layout_initializer
