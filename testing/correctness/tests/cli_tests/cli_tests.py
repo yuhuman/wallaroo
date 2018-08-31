@@ -27,16 +27,17 @@ from integration import (ex_validate,
                          start_runners)
 import json
 import tempfile
+INPUT_ITEMS=10
 
 def test_partition_query():
     with FreshCluster() as cluster:
         q = Query(cluster, "partition-query")
         expected = {"state_partitions":
-                    {"Sequence Window": {"initializer": [0,1]}},
+                    {"DummyState": {"initializer": [0,1]}},
                     "stateless_partitions":{}}
         got = q.result()
         assert expected.keys() == got.keys()
-        assert got["state_partitions"]["Sequence Window"].has_key("initializer")
+        assert got["state_partitions"]["DummyState"].has_key("initializer")
 
 def test_partition_count_query():
     with FreshCluster() as cluster:
@@ -44,8 +45,8 @@ def test_partition_count_query():
         assert sorted(got.keys()) == [
             "state_partitions", "stateless_partitions"]
         assert got["state_partitions"] == {
-            u"Sequence Window": {u"initializer": 2},
-            u"Counter": {u"initializer": 1}}
+            u"DummyState": {u"initializer": 1},
+            u"PartitionedDummyState": {u"initializer": INPUT_ITEMS}}
         for (k, v) in got["stateless_partitions"].items():
             assert int(k)
             assert v == {u"initializer":1}
@@ -66,21 +67,17 @@ def test_source_ids_query():
         assert len(got["source_ids"]) == 1
         assert int(got["source_ids"][0])
 
-def test_boundary_count_status_query():
-    with FreshCluster(n_workers=2) as cluster:
-        q = Query(cluster, "boundary-count-status", parser=(lambda(x): x))
-        # TODO "What do I need to to do get data here?"
-        assert q.result() == ""
-
 def test_state_entity_query():
     with FreshCluster(n_workers=2) as cluster:
         q = Query(cluster, "state-entity-query")
-        assert q.result() == {u'Sequence Window':[], u'Counter': [u'key']}
+        assert q.result() == {u'DummyState':[u'key'],
+                              u'PartitionedDummyState': [u'9',u'11']}
 
 def test_state_entity_count_query():
     with FreshCluster(n_workers=2) as cluster:
         q = Query(cluster, "state-entity-count-query")
-        assert q.result() == {u'Sequence Window':0, u'Counter':1}
+        assert q.result() == {u'DummyState':1,
+                              u'PartitionedDummyState':2}
 
 def test_stateless_partition_query():
     with FreshCluster(n_workers=2) as cluster:
@@ -103,7 +100,7 @@ def test_stateless_partition_count_query():
 
 class FreshCluster(object):
     def __init__(self, host='127.0.0.1', n_sources=1, n_workers=1,
-                 command='machida --application-module sequence_window'):
+                 command='machida --application-module dummy'):
         res_dir = tempfile.mkdtemp(dir='/tmp/', prefix='res-data.')
         setup_resilience_path(res_dir)
         runners = []
@@ -131,10 +128,11 @@ class FreshCluster(object):
         if runner_ready_checker.error:
             raise runner_ready_checker.error
         sender = Sender(host, input_ports[0],
-                        Reader(sequence_generator(1000)) ,
-                        batch_size=100,
+                        Reader(sequence_generator(INPUT_ITEMS)) ,
+                        batch_size=INPUT_ITEMS,
                         interval=0.05)
         sender.start()
+        sender.join()
         self._cluster = Cluster(host=host,
                                 n_workers=n_workers,
                                 ports=worker_ports,

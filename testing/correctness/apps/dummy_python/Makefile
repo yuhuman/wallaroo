@@ -7,6 +7,7 @@ endif
 ifndef $(abspath $(lastword $(MAKEFILE_LIST)))_MK
 $(abspath $(lastword $(MAKEFILE_LIST)))_MK := 1
 
+
 # The following are control variables that determine what logic from `rules.mk` is enabled
 
 # `true`/`false` to enable/disable the actual unit test command so it can be overridden (the targets are still created)
@@ -33,22 +34,21 @@ $(abspath $(lastword $(MAKEFILE_LIST)))_DOCKER_TARGET := false
 # (and by recursion every makefile in the tree that is referenced)
 $(abspath $(lastword $(MAKEFILE_LIST)))_RECURSE_SUBMAKEFILES := false
 
-CLI_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-CUSTOM_PATH += :$(EXTERNAL_SENDER_PATH)
-CUSTOM_PYTHONPATH += :$(DUMMY_PYTHON_PATH):../../../tools/integration/
 
-build-testing-correctness-tests-cli_tests: build-machida
-build-testing-correctness-tests-cli_tests: build-testing-tools-external_sender
-integration-tests-testing-correctness-tests-cli_tests: cli_tests
+DUMMY_PYTHON_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 
 # standard rules generation makefile
 include $(rules_mk_path)
 
-cli_tests:
-	cd $(CLI_PATH) && \
-	export PYTHONPATH="../../../../machida/:../../apps/dummy_python/:../../../tools/integration/" ;\
-	python2 -m pytest -s --color=yes --tb=native \
-	 --verbose --exitfirst cli_tests.py \
-	$(pytest_exp)
 
+build-testing-correctness-apps-dummy_python: build-machida
+build-testing-correctness-apps-dummy_python: build-testing-correctness-apps-dummy-validator
+integration-tests-testing-correctness-apps-dummy_python: build-testing-correctness-apps-dummy_python
+integration-tests-testing-correctness-apps-dummy_python: dummy_python_test
+
+dummy_python_test:
+	exit 0
+
+# end of prevent rules from being evaluated/included multiple times
 endif

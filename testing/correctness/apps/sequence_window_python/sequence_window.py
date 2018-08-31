@@ -27,9 +27,7 @@ def application_setup(args):
     ab = wallaroo.ApplicationBuilder("Sequence Window")
     ab.new_pipeline("Sequence Window",
                     wallaroo.TCPSourceConfig(in_host, in_port, decoder))
-    ab.to_stateful(count_values, Counter, "Counter")
     ab.to(maybe_one_to_many)
-    ab.to_parallel(id)
     ab.to_state_partition(observe_new_value, SequenceWindow,
                           "Sequence Window", partition,
                           sequence_partitions)
@@ -40,16 +38,6 @@ def application_setup(args):
 @wallaroo.partition
 def partition(data):
     return str(data % 2)
-
-class Counter(object):
-    """This is here to provide more data in external queries,
-    see testing/correctness/tests/cli_tests/cli_tests.py
-    """
-    def __init__(self):
-        self.n = 0
-    def update(self, value):
-        self.n = self.n+1
-        return (value, True)
 
 
 class SequenceWindow(object):
@@ -72,9 +60,6 @@ def decoder(bs):
     value = struct.unpack(">Q", bs)[0]
     return value
 
-@wallaroo.state_computation(name='Count things')
-def count_values(data, counter):
-    return counter.update(data)
 
 MAGIC_NUMBER = 12
 @wallaroo.computation_multi(name="Maybe one to many")
@@ -98,9 +83,6 @@ def maybe_one_to_many(data):
     else:
         return [data]
 
-@wallaroo.computation(name="Do nothing")
-def id(data):
-    return data
 
 @wallaroo.state_computation(name="Observer New Value")
 def observe_new_value(data, state):
