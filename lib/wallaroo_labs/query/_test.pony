@@ -35,7 +35,7 @@ actor Main is TestList
     test(Property1UnitTest[Map[String,Array[String]]](
       _StateEntityEncodingProperty))
     test(Property1UnitTest[StateAndStatelessDigest](
-      _PartitionQueryIdsEncodingProperty))
+      _PartitionQueryEncodingProperty))
 
 
 class _SourceIdsCodecProperty is Property1[Array[String]]
@@ -64,37 +64,25 @@ class _StateEntityEncodingProperty is Property1[Map[String,Array[String]]]
     doc.parse(encoded) ?
     ph.assert_isnt[JsonType](None, doc.data)
 
-type StateAndStatelessDigest is
-  Map[String,Map[String,Map[String,Array[String]]]]
 
-class _PartitionQueryIdsEncodingProperty
-  is Property1[StateAndStatelessDigest]
-
+class _PartitionQueryEncodingProperty is Property1[StateAndStatelessDigest]
   fun name() : String => "query_json/partition_query_ids_prop"
 
   fun gen() : Generator[StateAndStatelessDigest] =>
-    Generator[StateAndStatelessDigest](
-    object is GenObj[StateAndStatelessDigest]
-      fun generate(rnd: Randomness): GenerateResult[StateAndStatelessDigest] ?
-      =>
-      let st_ent : Map[String,Map[String,Array[String]]] =
-        GenMapStringToMapStringToArrayString().generate_value(rnd)?
-      let sl_ent : Map[String,Map[String,Array[String]]] =
-        GenMapStringToMapStringToArrayString().generate_value(rnd)?
-      let digest : StateAndStatelessDigest =
-         Map[String,Map[String,Map[String,Array[String]]]]()
-      digest.update("state_partitions", consume st_ent)
-      digest.update("stateless_partitions", consume sl_ent)
-      digest
-     end)
+    GenStateAndStatelessDigest()
 
   fun property(digest: StateAndStatelessDigest, ph: PropertyHelper) ?
   =>
     let digest' = MapMapMapToVal(digest)
-    let encoded = PartitionQueryStateAndStatelessIdsEncoder(digest')
+    let encoded_ids = PartitionQueryStateAndStatelessIdsEncoder(digest')
+    let encoded_counts = PartitionQueryStateAndStatelessCountsEncoder(digest')
     let doc = JsonDoc
-    doc.parse(encoded) ?
+    doc.parse(encoded_ids) ?
     ph.assert_isnt[JsonType](None, doc.data)
+
+    doc.parse(encoded_counts) ?
+    ph.assert_isnt[JsonType](None, doc.data)
+
 
 class iso _TestEncodeDecodeClusterStatus is UnitTest
   fun name(): String => "query_json/encode_decode_cluster_status"
@@ -173,11 +161,12 @@ primitive JsonEq
     end
     res
 
+type StateAndStatelessDigest is
+  Map[String,Map[String,Map[String,Array[String]]]]
 
 primitive GenArrayString
   fun apply() : Generator[Array[String]] =>
     Generators.array_of[String](Generators.ascii_letters() where max=10)
-
 
 primitive GenMapStringToArrayString
   fun apply() : Generator[Map[String,Array[String]]] =>
@@ -186,7 +175,6 @@ primitive GenMapStringToArrayString
                                              GenArrayString())
     Generators.map_of[String, Array[String]](tup where max=10)
 
-
 primitive GenMapStringToMapStringToArrayString
   fun apply() : Generator[Map[String,Map[String,Array[String]]]] =>
     let tup: Generator[(String, Map[String,Array[String]])] =
@@ -194,6 +182,23 @@ primitive GenMapStringToMapStringToArrayString
         Generators.ascii_letters(1,32),
         GenMapStringToArrayString())
     Generators.map_of[String, Map[String,Array[String]]](tup where max=10)
+
+primitive GenStateAndStatelessDigest
+  fun apply() : Generator[StateAndStatelessDigest] =>
+    Generator[StateAndStatelessDigest](
+    object is GenObj[StateAndStatelessDigest]
+      fun generate(rnd: Randomness): GenerateResult[StateAndStatelessDigest] ?
+      =>
+      let st_ent : Map[String,Map[String,Array[String]]] =
+        GenMapStringToMapStringToArrayString().generate_value(rnd)?
+      let sl_ent : Map[String,Map[String,Array[String]]] =
+        GenMapStringToMapStringToArrayString().generate_value(rnd)?
+      let digest : StateAndStatelessDigest =
+         Map[String,Map[String,Map[String,Array[String]]]]()
+      digest.update("state_partitions", consume st_ent)
+      digest.update("stateless_partitions", consume sl_ent)
+      digest
+     end)
 
 primitive ArrayToVal
   fun apply(a: Array[String] ref) : Array[String] val =>
