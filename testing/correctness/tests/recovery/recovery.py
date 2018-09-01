@@ -49,8 +49,8 @@ def _test_recovery(command):
     try:
         _run(command, runner_data)
     except:
-        logging.error("Integration pipeline_test encountered an error")
-        logging.error("Some workers exited badly. The last {} lines of "
+        logging.error("Recovery test encountered an error")
+        logging.error("Some workers did not exit cleanly. The last {} lines of "
             "each were:\n\n{}"
             .format(FROM_TAIL,
                 runner_data_format(runner_data,

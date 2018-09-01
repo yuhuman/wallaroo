@@ -367,6 +367,7 @@ class MultiSequenceGenerator(object):
         # self.seqs stores the last value sent for each sequence
         self._idx = 0  # the idx of the last sequence sent
         self._remaining = []
+        self.lock = threading.Lock()
 
     def format_value(self, value, partition):
         return struct.pack('>IQ7s', 15, value, '{:07d}'.format(partition))
@@ -403,13 +404,18 @@ class MultiSequenceGenerator(object):
 
     def stop(self):
         logging.info("MultiSequenceGenerator: stop called")
-        self._remaining = [max_val - v for v in self.seqs]
+        logging.debug("seqs are: {}".format(self.seqs))
+        with self.lock:
+            max_val = max(self.seqs)
+            self._remaining = [max_val - v for v in self.seqs]
+            logging.debug("_remaining: {}".format(self._remaining))
 
     def send(self, ignored_arg):
-        if self._remaining:
-            idx, val = self._next_catchup_value()
-        else:
-            idx, val = self._next_value_()
+        with self.lock:
+            if self._remaining:
+                idx, val = self._next_catchup_value()
+            else:
+                idx, val = self._next_value_()
 
         return self.format_value(val, idx)
 

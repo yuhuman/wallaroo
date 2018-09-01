@@ -397,6 +397,7 @@ class Cluster(object):
         self.host = host
         self.workers = TypedList(types=(Runner,))
         self.dead_workers = TypedList(types=(Runner,))
+        self.restarted_workers = TypedList(types=(Runner,))
         self.runners = TypedList(types=(Runner,))
         self.source_addrs = []
         self.sink_addrs = []
@@ -492,10 +493,10 @@ class Cluster(object):
         if with_test:
             workers = {'joining': [w.name for w in runners],
                        'leaving': []}
-            self.confirm_migration(pre_partitions, workers)
+            self.confirm_migration(pre_partitions, workers, timeout=timeout)
         return runners
 
-    def shrink(self, workers=1, with_test=True):
+    def shrink(self, workers=1, timeout=30, with_test=True):
         logging.debug("shrink(workers={}, with_test={})".format(
             workers, with_test))
         # pick a worker that's not being shrunk
@@ -532,7 +533,7 @@ class Cluster(object):
         if with_test:
             workers = {'leaving': [w.name for w in leaving],
                        'joining': []}
-            self.confirm_migration(pre_partitions, workers)
+            self.confirm_migration(pre_partitions, workers, timeout=timeout)
         return leaving
 
     def get_partition_data(self):
@@ -551,7 +552,7 @@ class Cluster(object):
             return (pre_partitions, post_partitions, workers)
         # retry the test until it passes or a timeout elapses
         logging.debug("Running pre_process func with try_until")
-        try_until_timeout(confirm_migration, pre_process, timeout=120)
+        try_until_timeout(confirm_migration, pre_process, timeout=timeout)
 
     #####################
     # Worker management #
@@ -567,7 +568,8 @@ class Cluster(object):
         logging.debug("kill_worker(worker={})".format(worker))
         if isinstance(worker, Runner):
             # ref to worker
-            r = self.workers.remove(worker)
+            self.workers.remove(worker)
+            r = worker
         else: # index of worker in self.workers
             r = self.workers.pop(worker)
         r.kill()
@@ -594,23 +596,44 @@ class Cluster(object):
 
     def restart_worker(self, worker=-1):
         """
-        Restart a worker via the `respawn` method of a runner, then add the
+        Restart a worker(s) via the `respawn` method of a runner, then add the
         new Runner instance to `workers`.
         If `worker` is an int, perform this on the Runner instance at `worker`
         position in the `dead_workers` list.
         If `worker` is a Runner instance, perform this on that instance.
+        If `worker` is a list of Runners, perform this on each.
+        If `worker` is a slice, perform this on the slice of self.dead_workers
         """
         logging.debug("restart_worker(worker={})".format(worker))
         if isinstance(worker, Runner):
             # ref to dead worker instance
-            old_r = worker
+            old_rs = [worker]
+        elif isinstance(worker, (list, tuple)):
+            old_rs = worker
+        elif isinstance(worker, slice):
+            old_rs = self.dead_workers[worker]
         else: # index of worker in self.dead_workers
-            old_r = self.dead_workers[worker]
-        r = old_r.respawn()
-        self.workers.append(r)
-        self.runners.append(r)
-        r.start()
-        return r
+            old_rs = [self.dead_workers[worker]]
+        new_rs = []
+        for r in old_rs:
+            new_rs.append(r.respawn())
+        for r in new_rs:
+            r.start()
+        time.sleep(0.05)
+        t0 = time.time()
+        while True:
+            try:
+                [r.is_alive() for r in new_rs]
+                break
+            except:
+                if time.time() - t0 > 2:
+                    raise
+            time.sleep(0.05)
+        for r in new_rs:
+            self.restarted_workers.append(r)
+            self.workers.append(r)
+            self.runners.append(r)
+        return new_rs
 
     def stop_workers(self):
         logging.debug("stop_workers()")
@@ -632,14 +655,14 @@ class Cluster(object):
         for s in self.sinks:
             s.stop()
 
-    def sink_await(self, values, timeout=30, sink=-1):
-        logging.debug("sink_await(values={}, timeout={}, sink={})".format(
-            values, timeout, sink))
+    def sink_await(self, values, timeout=30, func=lambda x: x, sink=-1):
+        logging.debug("sink_await(values={}, timeout={}, func: {}, sink={})"
+            .format(values, timeout, func, sink))
         if isinstance(sink, Sink):
             pass
         else:
             sink = self.sinks[sink]
-        t = SinkAwaitValue(sink, values, timeout)
+        t = SinkAwaitValue(sink, values, timeout, func)
         t.start()
         t.join()
         if t.error:
