@@ -216,7 +216,7 @@ primitive ExternalMsgEncoder
 
   fun _partition_digest(state_routers: Map[String,
     PartitionRouter], stateless_routers: Map[U128, StatelessPartitionRouter]):
-    Map[String, Map[String, Map[String, Array[String] val] val] val]
+    Map[String, Map[String, Map[String, Array[String] val] val] val] val
   =>
     let state_ps =
       recover iso Map[String, Map[String, Array[String] val] val] end
@@ -231,10 +231,12 @@ primitive ExternalMsgEncoder
       stateless_ps(k.string()) = v.distribution_digest()
     end
     let digest_map =
-      Map[String, Map[String, Map[String, Array[String] val] val] val]
+      recover trn
+        Map[String, Map[String, Map[String, Array[String] val] val] val]
+      end
     digest_map("state_partitions") = consume state_ps
     digest_map("stateless_partitions") = consume stateless_ps
-    digest_map
+    consume digest_map
 
   fun _state_entity_digest(state_routers: Map[String, PartitionRouter]):
     Map[String, Array[String] val] val

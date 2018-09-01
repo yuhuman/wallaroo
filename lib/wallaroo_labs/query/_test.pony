@@ -32,20 +32,69 @@ actor Main is TestList
   fun tag tests(test: PonyTest) =>
     test(_TestEncodeDecodeClusterStatus)
     test(Property1UnitTest[Array[String]](_SourceIdsCodecProperty))
+    test(Property1UnitTest[Map[String,Array[String]]](
+      _StateEntityEncodingProperty))
+    test(Property1UnitTest[StateAndStatelessDigest](
+      _PartitionQueryIdsEncodingProperty))
+
 
 class _SourceIdsCodecProperty is Property1[Array[String]]
   fun name(): String => "query_json/source_ids_codec_prop"
 
-  fun gen() : Generator[Array[String]] =>
-    Generators.array_of[String](Generators.ascii_letters())
+  fun gen() : Generator[Array[String]] => GenArrayString()
 
   fun property(arg1: Array[String], ph: PropertyHelper) ? =>
-    let arg1': Array[String] val = ToVal(arg1)
-    let encoded = SourceIdsQueryEncoder.response(arg1')
+    let encoded = SourceIdsQueryEncoder.response(ArrayToVal(arg1))
     let response = SourceIdsQueryJsonDecoder.response(encoded)?
 
     ph.assert_true(JsonEq.parsed(encoded, response.json)?)
     ph.assert_array_eq[String](arg1, response.source_ids)
+
+
+class _StateEntityEncodingProperty is Property1[Map[String,Array[String]]]
+  fun name(): String => "query_json/state_entity_encoding_prop"
+
+  fun gen() : Generator[Map[String,Array[String]]] =>
+    GenMapStringToArrayString()
+
+  fun property(digest: Map[String,Array[String]], ph: PropertyHelper) ? =>
+    let encoded: String =
+      StateEntityQueryEncoder.state_entity_keys(MapToVal(digest))
+    let doc = JsonDoc
+    doc.parse(encoded) ?
+    ph.assert_isnt[JsonType](None, doc.data)
+
+type StateAndStatelessDigest is
+  Map[String,Map[String,Map[String,Array[String]]]]
+
+class _PartitionQueryIdsEncodingProperty
+  is Property1[StateAndStatelessDigest]
+
+  fun name() : String => "query_json/partition_query_ids_prop"
+
+  fun gen() : Generator[StateAndStatelessDigest] =>
+    Generator[StateAndStatelessDigest](
+    object is GenObj[StateAndStatelessDigest]
+      fun generate(rnd: Randomness): GenerateResult[StateAndStatelessDigest] ?
+      =>
+      let st_ent : Map[String,Map[String,Array[String]]] =
+        GenMapStringToMapStringToArrayString().generate_value(rnd)?
+      let sl_ent : Map[String,Map[String,Array[String]]] =
+        GenMapStringToMapStringToArrayString().generate_value(rnd)?
+      let digest : StateAndStatelessDigest =
+         Map[String,Map[String,Map[String,Array[String]]]]()
+      digest.update("state_partitions", consume st_ent)
+      digest.update("stateless_partitions", consume sl_ent)
+      digest
+     end)
+
+  fun property(digest: StateAndStatelessDigest, ph: PropertyHelper) ?
+  =>
+    let digest' = MapMapMapToVal(digest)
+    let encoded = PartitionQueryStateAndStatelessIdsEncoder(digest')
+    let doc = JsonDoc
+    doc.parse(encoded) ?
+    ph.assert_isnt[JsonType](None, doc.data)
 
 class iso _TestEncodeDecodeClusterStatus is UnitTest
   fun name(): String => "query_json/encode_decode_cluster_status"
@@ -76,6 +125,7 @@ class iso _TestEncodeDecodeClusterStatus is UnitTest
     for i in Range(0, worker_count.usize()) do
       h.assert_eq[String](worker_names(i)?, decoded2.worker_names(i)?)
     end
+
 
 primitive JsonEq
   fun parsed(s: String, t: String): Bool ? =>
@@ -123,8 +173,64 @@ primitive JsonEq
     end
     res
 
-primitive ToVal
-  fun apply(a: Array[String val] ref) : Array[String val] val =>
+
+primitive GenArrayString
+  fun apply() : Generator[Array[String]] =>
+    Generators.array_of[String](Generators.ascii_letters() where max=10)
+
+
+primitive GenMapStringToArrayString
+  fun apply() : Generator[Map[String,Array[String]]] =>
+    let tup: Generator[(String, Array[String])] =
+      Generators.zip2[String, Array[String]](Generators.ascii_letters(1,32),
+                                             GenArrayString())
+    Generators.map_of[String, Array[String]](tup where max=10)
+
+
+primitive GenMapStringToMapStringToArrayString
+  fun apply() : Generator[Map[String,Map[String,Array[String]]]] =>
+    let tup: Generator[(String, Map[String,Array[String]])] =
+      Generators.zip2[String, Map[String,Array[String]]](
+        Generators.ascii_letters(1,32),
+        GenMapStringToArrayString())
+    Generators.map_of[String, Map[String,Array[String]]](tup where max=10)
+
+primitive ArrayToVal
+  fun apply(a: Array[String] ref) : Array[String] val =>
     let result: Array[String] trn = recover trn Array[String] end
     for v in a.values() do result.push(v) end
+    consume result
+
+primitive MapToVal
+  fun apply(m: Map[String, Array[String] ref] ref)
+    : Map[String, Array[String] val] val
+  =>
+    let result: Map[String,Array[String] val] trn =
+      recover trn Map[String,Array[String] val] end
+    for (k,v) in m.pairs() do result(k) = ArrayToVal(v) end
+    consume result
+
+primitive MapMapToVal
+  fun apply(m: Map[String,Map[String, Array[String] ref] ref] ref)
+    : Map[String,Map[String, Array[String] val] val] val
+  =>
+    let result: Map[String,Map[String,Array[String] val] val] trn =
+      recover trn Map[String,Map[String,Array[String] val] val] end
+    for (k,v) in m.pairs() do
+      result(k) = MapToVal(v) end
+    consume result
+
+primitive MapMapMapToVal
+  fun apply(m: Map[String,
+                   Map[String,Map[String, Array[String] ref] ref] ref] ref)
+    : Map[String,
+          Map[String,Map[String, Array[String] val] val] val] val
+  =>
+    let result: Map[String,
+                    Map[String,Map[String,Array[String] val] val] val] trn =
+      recover trn
+        Map[String,Map[String,Map[String,Array[String] val] val] val]
+      end
+    for (k,v) in m.pairs() do
+      result(k) = MapMapToVal(v) end
     consume result

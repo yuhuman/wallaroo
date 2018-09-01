@@ -27,13 +27,13 @@ type _StepIdsByWorker is Map[String, _StepIds] val
 type _PartitionQueryMap is Map[String, _StepIdsByWorker] val
 
 primitive PartitionQueryStateAndStatelessIdsEncoder
-  fun apply(m: Map[String, _PartitionQueryMap]): String =>
+  fun apply(m: Map[String, _PartitionQueryMap] val): String =>
     _PartitionQueryEncoder(m
       where step_ids_to_json = _EncodeStringArray~apply())
 
 
 primitive PartitionQueryStateAndStatelessCountsEncoder
-  fun apply(m: Map[String, _PartitionQueryMap]): String =>
+  fun apply(m: Map[String, _PartitionQueryMap] val): String =>
     _PartitionQueryEncoder(m
       where step_ids_to_json = _EncodeArrayLength~apply())
 
@@ -127,7 +127,7 @@ primitive SourceIdsQueryEncoder
 
 primitive _PartitionQueryEncoder
   fun apply(
-    m: Map[String, _PartitionQueryMap],
+    m: Map[String, _PartitionQueryMap] val,
     step_ids_to_json: {(_StepIds): JsonType}) :
     String
   =>
