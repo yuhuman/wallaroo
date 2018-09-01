@@ -117,7 +117,7 @@ primitive JsonEq
     for (s_key, s_val) in s.data.pairs() do
       try
         if not JsonEq(s_val, t.data(s_key)?) then res = false; break end
-      else
+      else // key doesn't exist in t
         res = false; break
       end
     end
