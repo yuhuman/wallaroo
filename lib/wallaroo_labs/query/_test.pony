@@ -42,8 +42,10 @@ class _SourceIdsCodecProperty is Property1[Array[String]]
   fun property(arg1: Array[String], ph: PropertyHelper) ? =>
     let arg1': Array[String] val = ToVal(arg1)
     let encoded = SourceIdsQueryEncoder.response(arg1')
-    let decoded = SourceIdsQueryJsonDecoder.response(encoded)?.json
-    ph.assert_true(JsonEq.parsed(encoded, decoded)?)
+    let response = SourceIdsQueryJsonDecoder.response(encoded)?
+
+    ph.assert_true(JsonEq.parsed(encoded, response.json)?)
+    ph.assert_array_eq[String](arg1, response.source_ids)
 
 class iso _TestEncodeDecodeClusterStatus is UnitTest
   fun name(): String => "query_json/encode_decode_cluster_status"
@@ -126,4 +128,3 @@ primitive ToVal
     let result: Array[String] trn = recover trn Array[String] end
     for v in a.values() do result.push(v) end
     consume result
-
