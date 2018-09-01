@@ -2,6 +2,10 @@
   "deps": [
     { "type": "local",
       "local-path": "../"
+    },
+    { "type": "github",
+      "repo": "mfelsche/ponycheck",
+      "tag": "d1f60e7"
     }
   ]
 }
