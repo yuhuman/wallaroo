@@ -202,7 +202,7 @@ primitive ArrayToVal
     consume result
 
 primitive MapToVal
-  fun apply(m: Map[String, Array[String] ref] ref)
+  fun apply(m: Map[String, Array[String]])
     : Map[String, Array[String] val] val
   =>
     let result: Map[String,Array[String] val] trn =
@@ -211,7 +211,7 @@ primitive MapToVal
     consume result
 
 primitive MapMapToVal
-  fun apply(m: Map[String,Map[String, Array[String] ref] ref] ref)
+  fun apply(m: Map[String,Map[String, Array[String]]])
     : Map[String,Map[String, Array[String] val] val] val
   =>
     let result: Map[String,Map[String,Array[String] val] val] trn =
@@ -221,8 +221,7 @@ primitive MapMapToVal
     consume result
 
 primitive MapMapMapToVal
-  fun apply(m: Map[String,
-                   Map[String,Map[String, Array[String] ref] ref] ref] ref)
+  fun apply(m: Map[String, Map[String,Map[String, Array[String]]]])
     : Map[String,
           Map[String,Map[String, Array[String] val] val] val] val
   =>
