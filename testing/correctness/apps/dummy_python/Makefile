@@ -41,14 +41,5 @@ DUMMY_PYTHON_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # standard rules generation makefile
 include $(rules_mk_path)
 
-
-build-testing-correctness-apps-dummy_python: build-machida
-build-testing-correctness-apps-dummy_python: build-testing-correctness-apps-dummy-validator
-integration-tests-testing-correctness-apps-dummy_python: build-testing-correctness-apps-dummy_python
-integration-tests-testing-correctness-apps-dummy_python: dummy_python_test
-
-dummy_python_test:
-	exit 0
-
 # end of prevent rules from being evaluated/included multiple times
 endif
