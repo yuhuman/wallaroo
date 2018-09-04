@@ -30,13 +30,10 @@ import tempfile
 INPUT_ITEMS=10
 
 def test_partition_query():
-    with FreshCluster() as cluster:
+    with FreshCluster(n_workers=3) as cluster:
         q = Query(cluster, "partition-query")
-        expected = {"state_partitions":
-                    {"DummyState": {"initializer": [0,1]}},
-                    "stateless_partitions":{}}
         got = q.result()
-        assert expected.keys() == got.keys()
+        assert sorted(["state_partitions","stateless_partitions"]) == sorted(got.keys())
         assert got["state_partitions"]["DummyState"].has_key("initializer")
 
 def test_partition_count_query():
