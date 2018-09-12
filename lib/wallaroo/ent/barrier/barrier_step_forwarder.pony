@@ -72,8 +72,14 @@ class BarrierStepForwarder
     end
 
     if barrier_token != _barrier_token then
-      @printf[I32]("!@ Received %s when still processing %s at step %s\n".cstring(),
-        barrier_token.string().cstring(), _barrier_token.string().cstring(), _step_id.string().cstring())
+      @printf[I32]("!@ Received %s when still processing %s from input step %s for processing step %s\n".cstring(),
+        barrier_token.string().cstring(), _barrier_token.string().cstring(), step_id.string().cstring(), _step_id.string().cstring())
+      @printf[I32]("!@ DATA: inputs: %s, inputs_blocking: %s, removed_inputs: %s\n".cstring(), inputs.size().string().cstring(), _inputs_blocking.size().string().cstring(), _removed_inputs.size().string().cstring())
+      @printf[I32]("!@ KNOWN INPUTS: \n".cstring())
+      //!@
+      for i in inputs.keys() do
+        @printf[I32]("!@ -- %s\n".cstring(), i.string().cstring())
+      end
       Fail()
     end
 
