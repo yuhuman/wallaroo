@@ -111,7 +111,7 @@ class BarrierStepForwarder
     if (inputs.size() == (_inputs_blocking.size() + _removed_inputs.size()))
       and not _step.has_pending_messages()
     then
-      // @printf[I32]("!@ That was last barrier at Forwarder.  FORWARDING!\n".cstring())
+      @printf[I32]("!@ That was last barrier for %s at Forwarder.  FORWARDING!\n".cstring(), _barrier_token.string().cstring())
       for (o_id, o) in _step.outputs().pairs() do
         match o
         | let ob: OutgoingBoundary =>
@@ -129,7 +129,7 @@ class BarrierStepForwarder
     else
       //!@
       None
-      // @printf[I32]("!@ Not last barrier at Forwarder. inputs: %s, inputs_blocking: %s, removed_inputs: %s\n".cstring(), inputs.size().string().cstring(), _inputs_blocking.size().string().cstring(), _removed_inputs.size().string().cstring())
+      @printf[I32]("!@ Not last barrier for %s at Forwarder. inputs: %s, inputs_blocking: %s, removed_inputs: %s\n".cstring(), _barrier_token.string().cstring(), inputs.size().string().cstring(), _inputs_blocking.size().string().cstring(), _removed_inputs.size().string().cstring())
       // @printf[I32]("!@ Inputs:\n".cstring())
       //!@
       // for i in inputs.keys() do
