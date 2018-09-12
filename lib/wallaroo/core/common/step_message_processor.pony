@@ -124,6 +124,7 @@ class BarrierStepMessageProcessor is StepMessageProcessor
   fun ref receive_new_barrier(input_id: RoutingId, producer: Producer,
     barrier_token: BarrierToken)
   =>
+    @printf[I32]("!@ StepMessageProcessor: Calling BarrierStepForwarder new_receive_barrier for %s!\n".cstring(), barrier_token.string().cstring())
     _barrier_forwarder.receive_new_barrier(input_id, producer, barrier_token)
 
   fun ref receive_barrier(input_id: RoutingId, producer: Producer,
@@ -133,6 +134,7 @@ class BarrierStepMessageProcessor is StepMessageProcessor
       @printf[I32]("!@ StepMessageProcessor: Queuing barrier %s!\n".cstring(), barrier_token.string().cstring())
       _queued.push(QueuedBarrier(input_id, producer, barrier_token))
     else
+      @printf[I32]("!@ StepMessageProcessor: Calling BarrierStepForwarder receive_barrier with unblocked input for %s!\n".cstring(), barrier_token.string().cstring())
       _barrier_forwarder.receive_barrier(input_id, producer, barrier_token)
     end
 

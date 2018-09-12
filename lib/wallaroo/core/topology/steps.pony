@@ -592,6 +592,7 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
       end
 
       if _step_message_processor.barrier_in_progress() then
+        @printf[I32]("!@ Step: barrier_in_progress. Calling receive_barrier on StepMessageProcessor for %s at step %s\n".cstring(), barrier_token.string().cstring(), _id.string().cstring())
         _step_message_processor.receive_barrier(step_id, producer,
           barrier_token)
       else
@@ -600,6 +601,7 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
           try
             _step_message_processor = BarrierStepMessageProcessor(this,
               _barrier_forwarder as BarrierStepForwarder)
+            @printf[I32]("!@ Step: not barrier_in_progress. Calling new_receive_barrier on StepMessageProcessor for %s at step %s\n".cstring(), barrier_token.string().cstring(), _id.string().cstring())
             _step_message_processor.receive_new_barrier(step_id, producer,
               barrier_token)
           else
