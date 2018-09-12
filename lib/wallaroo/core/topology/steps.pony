@@ -110,6 +110,8 @@ actor Step is (Producer & Consumer & Rerouter & BarrierProcessor)
     _state_step_creator = state_step_creator
     _id = id
 
+    @printf[I32]("!@ CREATING STEP %s\n".cstring(), _id.string().cstring())
+
     for (worker, boundary) in outgoing_boundaries.pairs() do
       _outgoing_boundaries(worker) = boundary
     end
