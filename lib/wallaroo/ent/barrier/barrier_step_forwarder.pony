@@ -77,7 +77,8 @@ class BarrierStepForwarder
       @printf[I32]("!@ DATA: inputs: %s, inputs_blocking: %s, removed_inputs: %s\n".cstring(), inputs.size().string().cstring(), _inputs_blocking.size().string().cstring(), _removed_inputs.size().string().cstring())
       @printf[I32]("!@ KNOWN INPUTS: \n".cstring())
       //!@
-      for i in inputs.keys() do
+      let ins = _step.inputs()
+      for i in ins.keys() do
         @printf[I32]("!@ -- %s\n".cstring(), i.string().cstring())
       end
       Fail()
