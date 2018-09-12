@@ -34,8 +34,7 @@ $(abspath $(lastword $(MAKEFILE_LIST)))_DOCKER_TARGET := false
 $(abspath $(lastword $(MAKEFILE_LIST)))_RECURSE_SUBMAKEFILES := false
 
 CLI_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-CUSTOM_PATH += :$(EXTERNAL_SENDER_PATH)
-CUSTOM_PYTHONPATH += :$(DUMMY_PYTHON_PATH):../../../tools/integration/
+PYTHONPATH := :$(PYTHONPATH):$(DUMMY_PYTHON_PATH)
 
 build-testing-correctness-tests-cli_tests: build-machida
 build-testing-correctness-tests-cli_tests: build-testing-tools-external_sender
@@ -46,7 +45,6 @@ include $(rules_mk_path)
 
 cli_tests:
 	cd $(CLI_PATH) && \
-	export PYTHONPATH="../../../../machida/:../../apps/dummy_python/:../../../tools/integration/" ;\
 	python2 -m pytest -s --color=yes --tb=native \
 	 --verbose --exitfirst cli_tests.py \
 	$(pytest_exp)

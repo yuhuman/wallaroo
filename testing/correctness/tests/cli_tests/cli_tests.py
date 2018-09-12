@@ -12,32 +12,33 @@
 #  implied. See the License for the specific language governing
 #  permissions and limitations under the License.
 
-from collections import namedtuple
-from integration import (ex_validate,
-                         get_port_values,
-                         Metrics,
+from integration import (Cluster,
+                         iter_generator,
                          Reader,
-                         Runner,
-                         RunnerReadyChecker,
-                         setup_resilience_path,
-                         clean_resilience_path,
-                         Sender,
-                         sequence_generator,
-                         Sink,
-                         start_runners)
+                         runner_data_format,
+                         Sender)
+
+from integration.external import run_shell_cmd
+from integration.logger import set_logging
+from itertools import cycle
 import json
+from struct import pack
 import tempfile
+import time
+
 INPUT_ITEMS=10
+CMD='machida --application-module dummy'
 
 def test_partition_query():
-    with FreshCluster(n_workers=3) as cluster:
+    with Cluster(command=CMD,workers=3) as cluster:
         q = Query(cluster, "partition-query")
         got = q.result()
         assert sorted(["state_partitions","stateless_partitions"]) == sorted(got.keys())
         assert got["state_partitions"]["DummyState"].has_key("initializer")
 
 def test_partition_count_query():
-    with FreshCluster() as cluster:
+    with Cluster(command=CMD,) as cluster:
+        given_data_sent(cluster)
         got = Query(cluster, "partition-count-query").result()
         assert sorted(got.keys()) == [
             "state_partitions", "stateless_partitions"]
@@ -49,7 +50,8 @@ def test_partition_count_query():
             assert v == {u"initializer":1}
 
 def test_cluster_status_query():
-    with FreshCluster(n_workers=2) as cluster:
+    with Cluster(command=CMD,workers=2) as cluster:
+
         q = Query(cluster, "cluster-status-query")
         assert q.result() == {
             u"processing_messages": True,
@@ -57,7 +59,8 @@ def test_cluster_status_query():
             u"worker_count": 2}
 
 def test_source_ids_query():
-    with FreshCluster(n_sources=1) as cluster:
+    with Cluster(command=CMD,sources=1) as cluster:
+        given_data_sent(cluster)
         q = Query(cluster, "source-ids-query")
         got = q.result()
         assert got.keys() == ["source_ids"]
@@ -65,19 +68,22 @@ def test_source_ids_query():
         assert int(got["source_ids"][0])
 
 def test_state_entity_query():
-    with FreshCluster(n_workers=2) as cluster:
-        q = Query(cluster, "state-entity-query")
-        assert q.result() == {u'DummyState':[u'key'],
-                              u'PartitionedDummyState': [u'9',u'11']}
+    with Cluster(command=CMD,workers=2) as cluster:
+        given_data_sent(cluster)
+        got = Query(cluster, "state-entity-query").result()
+        assert sorted(got.keys()) == [u'DummyState', u'PartitionedDummyState']
+        assert got[u'DummyState'] == [u'key']
+        assert len(got[u'PartitionedDummyState']) == 7
 
 def test_state_entity_count_query():
-    with FreshCluster(n_workers=2) as cluster:
+    with Cluster(command=CMD,workers=2) as cluster:
+        given_data_sent(cluster)
         q = Query(cluster, "state-entity-count-query")
         assert q.result() == {u'DummyState':1,
-                              u'PartitionedDummyState':2}
+                              u'PartitionedDummyState':7}
 
 def test_stateless_partition_query():
-    with FreshCluster(n_workers=2) as cluster:
+    with Cluster(command=CMD,workers=2) as cluster:
         got = Query(cluster, "stateless-partition-query").result()
         for (k,v) in got.items():
             assert int(k)
@@ -88,90 +94,37 @@ def test_stateless_partition_query():
             assert int((v[u"worker1"])[0])
 
 def test_stateless_partition_count_query():
-    with FreshCluster(n_workers=2) as cluster:
+    with Cluster(command=CMD, workers=2) as cluster:
         got = Query(cluster, "stateless-partition-count-query").result()
         for (k,v) in got.items():
             assert int(k)
             assert v == {u"initializer" : 1, u"worker1": 1}
 
+    # def __init__(self, host='127.0.0.1', sources=1, n_workers=1,
+    #              command='machida --application-module dummy'):
 
-class FreshCluster(object):
-    def __init__(self, host='127.0.0.1', n_sources=1, n_workers=1,
-                 command='machida --application-module dummy'):
-        res_dir = tempfile.mkdtemp(dir='/tmp/', prefix='res-data.')
-        setup_resilience_path(res_dir)
-        runners = []
-        sink = Sink(host)
-        sink.start()
-        metrics = Metrics(host)
-        metrics.start()
-
-        metrics_host, metrics_port = metrics.get_connection_info()
-        num_ports = n_sources + 3 * n_workers
-        ports = get_port_values(num=num_ports, host=host)
-        sink_host, sink_port = sink.get_connection_info()
-        outputs = '{}:{}'.format(sink_host, sink_port)
-        (input_ports, worker_ports) = (
-            ports[:n_sources],
-            [ports[n_sources:][i:i+3]
-             for i in xrange(0, len(ports[n_sources:]), 3)])
-        inputs = ','.join(['{}:{}'.format(host, p) for p in
-                           input_ports])
-        start_runners(runners, command, host, inputs, outputs,
-                      metrics_port, res_dir, n_workers, worker_ports)
-        runner_ready_checker = RunnerReadyChecker(runners, timeout=30)
-        runner_ready_checker.start()
-        runner_ready_checker.join()
-        if runner_ready_checker.error:
-            raise runner_ready_checker.error
-        sender = Sender(host, input_ports[0],
-                        Reader(sequence_generator(INPUT_ITEMS)) ,
-                        batch_size=INPUT_ITEMS,
-                        interval=0.05)
-        sender.start()
-        sender.join()
-        self._cluster = Cluster(host=host,
-                                n_workers=n_workers,
-                                ports=worker_ports,
-                                runners=runners,
-                                sink=sink,
-                                metrics=metrics,
-                                res_dir=res_dir)
-
-    def __enter__(self):
-        return self._cluster
-
-    def __exit__(self, type, _value, _traceback):
-        if type == Exception:
-            for r in self._cluster.runners:
-                print r.get_output()
-        [ r.stop() for r in self._cluster.runners ]
-        self._cluster.sink.stop()
-        clean_resilience_path(self._cluster.res_dir)
-
-
-Cluster=namedtuple('Cluster', ['host',
-                               'n_workers',
-                               'ports',
-                               'runners',
-                               'sink',
-                               'metrics',
-                               'res_dir'])
+def given_data_sent(cluster):
+    reader = Reader(iter_generator(
+        items=[chr(x+65) for x in range(INPUT_ITEMS)],
+        to_string=lambda s: pack('>2sI', s, 1),
+        on_next=lambda s: s))
+    sender = Sender(cluster.source_addrs[0],
+                    reader,
+                    batch_size=50, interval=0.05, reconnect=True)
+    cluster.add_sender(sender, start=True)
+    time.sleep(0.5)
 
 class Query(object):
-    def __init__(self, cluster, type, parser=json.loads):
-        host = cluster.host
-        port = cluster.ports[0][2]
-        cmd = "external_sender --json --external {}:{} --type {}"
-        self._cmd = cmd.format(host, port, type)
-        self._parser = parser
+    def __init__(self, cluster, type):
+        cmd = "external_sender --json --external {} --type {}"
+        self._cmd = cmd.format(cluster.workers[0].external, type)
 
     def result(self):
-        success, stdout, _, _ = ex_validate(self._cmd)
-        if success:
+        res = run_shell_cmd(self._cmd)
+        if res.success:
             try:
-                return self._parser(stdout)
+                return json.loads(res.output)
             except:
-                raise Exception("Failed running parser on {!r}".format(stdout))
+                raise Exception("Failed running parser on {!r}".format(res.output))
         else:
             raise Exception("Failed running cmd: {}".format(self._cmd))
