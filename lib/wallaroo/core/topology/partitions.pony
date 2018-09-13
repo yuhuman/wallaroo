@@ -223,7 +223,12 @@ class val KeyedStateSubpartitions[S: State ref] is
     let new_state_step_ids = recover iso Map[RoutingId, Step] end
 
     try
-      let local_keys = all_local_keys(_state_name)?
+      let local_keys =
+        try
+          all_local_keys(_state_name)?
+        else
+          SetIs[Key]
+        end
       let step_ids = state_step_ids(_state_name)?
 
       ifdef debug then
@@ -247,7 +252,7 @@ class val KeyedStateSubpartitions[S: State ref] is
         router_registry.register_producer(next_step_id, next_state_step)
       end
     else
-      @printf[I32]("No local keys for state %s\n".cstring(),
+      @printf[I32]("No step ids for state %s\n".cstring(),
         _state_name.cstring())
     end
 

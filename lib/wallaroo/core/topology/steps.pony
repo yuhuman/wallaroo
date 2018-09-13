@@ -445,13 +445,13 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     _routes.contains(c)
 
   be register_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     _inputs(id) = producer
     _upstreams.set(producer)
 
   be unregister_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     if _inputs.contains(id) then
       try

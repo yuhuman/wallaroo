@@ -1853,6 +1853,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         end
 
         // Create State Steps
+        @printf[I32]("!@ ><><>< state_builders size %s\n".cstring(), t.state_builders().size().string().cstring())
         for state_name in t.state_builders().keys() do
           try
             t.update_state_map(state_name, state_map,
@@ -1882,6 +1883,12 @@ actor LocalTopologyInitializer is LayoutInitializer
         end
 
         let sendable_state_steps = consume val state_steps_iso
+
+        @printf[I32]("!@ SENDABLE_STATE_STEPS: size %s\n".cstring(), sendable_state_steps.size().string().cstring())
+        //!@
+        for (k, v) in sendable_state_steps.pairs() do
+          @printf[I32]("!@ -- k: %s, size: %s\n".cstring(), k.cstring(), v.size().string().cstring())
+        end
 
         let data_routes = recover iso Map[RoutingId, Consumer] end
         for (k, v) in data_routes_ref.pairs() do

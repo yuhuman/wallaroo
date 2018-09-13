@@ -1448,8 +1448,8 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       consume new_state_routing_ids)
 
   fun blueprint(): PartitionRouterBlueprint =>
-    LocalPartitionRouterBlueprint[S](_state_name, _step_ids,
-      _hash_partitions, _state_routing_ids)
+    LocalPartitionRouterBlueprint[S](_state_name, _hash_partitions,
+      _state_routing_ids)
 
   fun distribution_digest(): Map[WorkerName, Array[String] val] val =>
     // Return a map of form {worker_name: routing_ids_as_strings}
@@ -1512,16 +1512,13 @@ trait val PartitionRouterBlueprint
 class val LocalPartitionRouterBlueprint[S: State ref]
   is PartitionRouterBlueprint
   let _state_name: String
-  let _step_ids: Map[RoutingId, Step] val
   let _hash_partitions: HashPartitions
   let _state_routing_ids: Map[WorkerName, RoutingId] val
 
-  new val create(state_name: String,
-    s_ids: Map[RoutingId, Step] val, hash_partitions: HashPartitions,
+  new val create(state_name: String, hash_partitions: HashPartitions,
     state_routing_ids: Map[WorkerName, RoutingId] val)
   =>
     _state_name = state_name
-    _step_ids = s_ids
     _hash_partitions = hash_partitions
     _state_routing_ids = state_routing_ids
 
@@ -1553,8 +1550,8 @@ class val LocalPartitionRouterBlueprint[S: State ref]
       end
 
     LocalPartitionRouter[S](_state_name, worker_name,
-      recover val Array[Step] end, _step_ids, consume hashed_node_routes,
-      new_hash_partitions, _state_routing_ids)
+      recover val Array[Step] end, recover Map[RoutingId, Step] end,
+      consume hashed_node_routes, new_hash_partitions, _state_routing_ids)
 
 trait val StatelessPartitionRouter is Router
   fun partition_id(): RoutingId

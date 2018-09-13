@@ -459,7 +459,7 @@ actor OutgoingBoundary is Consumer
     None
 
   be register_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Registered producer %s at boundary %s. Total %s upstreams.\n".cstring(), id.string().cstring(), (digestof this).string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Registered producer %s at boundary %s. Total %s upstreams.\n".cstring(), id.string().cstring(), (digestof this).string().cstring(), _upstreams.size().string().cstring())
 
     ifdef debug then
       Invariant(not _upstreams.contains(producer))
@@ -468,7 +468,7 @@ actor OutgoingBoundary is Consumer
     _upstreams.set(producer)
 
   be unregister_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Unregistered producer %s at boundary %s. Total %s upstreams.\n".cstring(), id.string().cstring(), (digestof this).string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Unregistered producer %s at boundary %s. Total %s upstreams.\n".cstring(), id.string().cstring(), (digestof this).string().cstring(), _upstreams.size().string().cstring())
 
     // TODO: Determine if we need this Invariant.
     // ifdef debug then
@@ -485,7 +485,7 @@ actor OutgoingBoundary is Consumer
   fun ref _forward_register_producer(source_id: RoutingId,
     target_id: RoutingId, producer: Producer)
   =>
-    @printf[I32]("!@ Forward Registered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
+    // @printf[I32]("!@ Forward Registered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
     _registered_producers.register_producer(source_id, producer, target_id)
     try
       let msg = ChannelMsgEncoder.register_producer(_worker_name,
@@ -499,7 +499,7 @@ actor OutgoingBoundary is Consumer
   be forward_unregister_producer(source_id: RoutingId, target_id: RoutingId,
     producer: Producer)
   =>
-    @printf[I32]("!@ Forward UNRegistered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
+    // @printf[I32]("!@ Forward UNRegistered producer at boundary %s. sourceid: %s, target_id: %s\n".cstring(), (digestof this).string().cstring(), source_id.string().cstring(), target_id.string().cstring())
 
     _registered_producers.unregister_producer(source_id, producer, target_id)
     try

@@ -663,6 +663,7 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
   =>
+    @printf[I32]("!@ Importing key state for %s:%s\n".cstring(), s_name.cstring(), key.cstring())
     ifdef debug then
       Invariant(s_name == _state_name)
     end

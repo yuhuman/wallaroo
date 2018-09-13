@@ -285,7 +285,7 @@ actor TCPSink is Sink
     _inputs
 
   be register_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Registered producer %s at sink %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _sink_id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Registered producer %s at sink %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _sink_id.string().cstring(), _upstreams.size().string().cstring())
     // If we have at least one input, then we are involved in checkpointing.
     if _inputs.size() == 0 then
       _barrier_initiator.register_sink(this)
@@ -296,7 +296,7 @@ actor TCPSink is Sink
     _upstreams.set(producer)
 
   be unregister_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Unregistered producer %s at sink %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _sink_id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Unregistered producer %s at sink %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _sink_id.string().cstring(), _upstreams.size().string().cstring())
 
     ifdef debug then
       Invariant(_upstreams.contains(producer))

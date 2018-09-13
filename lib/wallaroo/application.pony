@@ -220,7 +220,7 @@ class PipelineBuilder[In: Any val, Out: Any val, Last: Any val]
       state_name: StateName,
       partition: Partitions[Last],
       multi_worker: Bool = false,
-      per_worker_parallelism: USize = 100): PipelineBuilder[In, Out, Next]
+      per_worker_parallelism: USize = 10): PipelineBuilder[In, Out, Next]
   =>
     if ArrayHelpers[StateName]
       .contains[StateName](_pipeline_state_names, state_name)

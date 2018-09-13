@@ -39,6 +39,8 @@ actor DataReceivers
 
   var _router_registry: (RouterRegistry | None) = None
 
+  var _updated_data_router: Bool = false
+
   new create(auth: AmbientAuth, connections: Connections, worker_name: String,
     is_recovering: Bool = false)
   =>
@@ -119,6 +121,15 @@ actor DataReceivers
     _data_router = dr
     for data_receiver in _data_receivers.values() do
       data_receiver.update_router(_data_router)
+    end
+    if not _updated_data_router then
+      match _router_registry
+      | let rr: RouterRegistry =>
+        rr.data_receivers_initialized()
+        _updated_data_router = true
+      else
+        Fail()
+      end
     end
 
   be rollback_barrier_complete(recovery: Recovery) =>

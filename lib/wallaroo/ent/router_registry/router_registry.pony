@@ -150,6 +150,7 @@ actor RouterRegistry
 
   var _stop_the_world_pause: U64
 
+  var _data_receivers_initialized: Bool = false
   var _waiting_to_finish_join: Bool = false
   var _joining_state_routing_ids: (Map[StateName, RoutingId] val | None)
 
@@ -201,6 +202,19 @@ actor RouterRegistry
   be application_ready_to_work() =>
     _application_ready_to_work = true
 
+  be data_receivers_initialized() =>
+    _data_receivers_initialized = true
+    if _waiting_to_finish_join then
+      match _joining_state_routing_ids
+      | let sri: Map[StateName, RoutingId] val =>
+        if _inform_contacted_worker_of_initialization(sri) then
+          _waiting_to_finish_join = false
+        end
+      else
+        Fail()
+      end
+    end
+
   be set_data_router(dr: DataRouter) =>
     _data_router = dr
     _distribute_data_router()
@@ -210,6 +224,11 @@ actor RouterRegistry
 
   be set_partition_router(state_name: StateName, pr: PartitionRouter) =>
     _partition_routers(state_name) = pr
+    try
+      _local_keys.insert_if_absent(state_name, SetIs[Key])?
+    else
+      Unreachable()
+    end
 
   be set_stateless_partition_router(partition_id: U128,
     pr: StatelessPartitionRouter)
@@ -663,6 +682,11 @@ actor RouterRegistry
       let next_router = b.build_router(_worker_name, workers, obs, _auth)
       _distribute_partition_router(next_router)
       _partition_routers(s) = next_router
+      try
+        _local_keys.insert_if_absent(s, SetIs[Key])?
+      else
+        Unreachable()
+      end
     end
 
   be create_stateless_partition_routers_from_blueprints(
@@ -998,20 +1022,24 @@ actor RouterRegistry
     _inform_contacted_worker_of_initialization(state_routing_ids)
 
   fun ref _inform_contacted_worker_of_initialization(
-    state_routing_ids: Map[StateName, RoutingId] val)
+    state_routing_ids: Map[StateName, RoutingId] val): Bool
   =>
     match _contacted_worker
-    | let cw: String =>
+    | let cw: WorkerName =>
       if (_data_channel_listeners.size() != 0) and
-         (_control_channel_listeners.size() != 0)
+         (_control_channel_listeners.size() != 0) and
+         _data_receivers_initialized
       then
         _connections.inform_contacted_worker_of_initialization(cw,
           state_routing_ids)
+        true
       else
         _waiting_to_finish_join = true
+        false
       end
     else
       Fail()
+      false
     end
 
   be inform_worker_of_boundary_count(target_worker: WorkerName) =>
