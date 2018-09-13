@@ -19,31 +19,37 @@ use "wallaroo/ent/checkpoint"
 use "wallaroo_labs/mort"
 
 class val ShippedState
+  let state_name: StateName
+  let key: Key
   let state_bytes: ByteSeq val
 
-  new create(state_bytes': ByteSeq val)
-  =>
+  new create(state_name': StateName, key': Key, state_bytes': ByteSeq val) =>
+    state_name = state_name'
+    key = key'
     state_bytes = state_bytes'
 
 primitive StepStateMigrator
-  fun receive_state(runner: Runner, state: ByteSeq val)
+  fun receive_state(step: Step ref, runner: Runner, state_name: StateName,
+    key: Key, state: ByteSeq val)
   =>
     ifdef "trace" then
       @printf[I32]("Received new state\n".cstring())
     end
     match runner
     | let r: SerializableStateRunner =>
-      r.replace_serialized_state(state)
+      r.import_key_state(step, state_name, key, state)
     else
       Fail()
     end
 
   fun send_state(runner: Runner, id: RoutingId, boundary: OutgoingBoundary,
-    state_name: String, key: Key, checkpoint_id: CheckpointId, auth: AmbientAuth)
+    state_name: String, key: Key, checkpoint_id: CheckpointId,
+    auth: AmbientAuth)
   =>
     match runner
     | let r: SerializableStateRunner =>
-      let shipped_state = ShippedState(r.serialize_state())
+      let shipped_state = ShippedState(state_name, key,
+        r.export_key_state(key))
       let shipped_state_bytes =
         try
           Serialised(SerialiseAuth(auth), shipped_state)?

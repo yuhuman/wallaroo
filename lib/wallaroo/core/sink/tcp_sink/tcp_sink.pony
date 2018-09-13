@@ -269,8 +269,6 @@ actor TCPSink is Sink
     """
     None
 
-  be receive_state(state: ByteSeq val) => Fail()
-
   be dispose() =>
     """
     Gracefully shuts down the sink. Allows all pending writes

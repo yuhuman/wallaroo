@@ -34,7 +34,7 @@ trait tag LayoutInitializer
 
   be report_ready_to_work(initializable: Initializable)
 
-  be receive_immigrant_step(msg: StepMigrationMsg)
+  be receive_immigrant_key(msg: KeyMigrationMsg)
 
   be update_boundaries(bs: Map[String, OutgoingBoundary] val,
     bbs: Map[String, OutgoingBoundaryBuilder] val)

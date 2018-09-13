@@ -36,7 +36,6 @@ class LocalKeysFile
   //   x - StateName
   //   4 - Key entry length y
   //   y - Key
-  //   16 - RoutingId <--- only for add()
   let _file: File iso
   let _filepath: FilePath
   let _writer: Writer
@@ -46,8 +45,7 @@ class LocalKeysFile
     _filepath = fpath
     _file = recover iso File(_filepath) end
 
-  fun ref add_key(state_name: StateName, k: Key, r_id: RoutingId,
-    checkpoint_id: CheckpointId)
+  fun ref add_key(state_name: StateName, k: Key, checkpoint_id: CheckpointId)
   =>
     let payload_size = 4 + state_name.size() + 4 + k.size() + 16
 
@@ -59,7 +57,6 @@ class LocalKeysFile
     _writer.write(state_name)
     _writer.u32_be(k.size().u32())
     _writer.write(k)
-    _writer.u128_be(r_id)
     _file.writev(_writer.done())
 
   fun ref remove_key(state_name: StateName, k: Key, checkpoint_id: CheckpointId) =>
@@ -75,10 +72,10 @@ class LocalKeysFile
     _writer.write(k)
     _file.writev(_writer.done())
 
-  fun ref read_local_keys_and_truncate(checkpoint_id: CheckpointId):
-    Map[StateName, Map[Key, RoutingId] val] val
+  fun ref read_local_keys(checkpoint_id: CheckpointId):
+    Map[StateName, SetIs[Key] val] val
   =>
-    let lks = Map[StateName, Map[Key, RoutingId]]
+    let lks = Map[StateName, SetIs[Key]]
     let r = Reader
     _file.seek_start(0)
     if _file.size() > 0 then
@@ -116,18 +113,14 @@ class LocalKeysFile
 
             match cmd
             | LocalKeysFileCommand.add() =>
-              r.append(_file.read(16))
-              @printf[I32]("!@routing_id\n".cstring())
-              let routing_id = r.u128_be()?
-              lks.insert_if_absent(s_name, Map[Key, RoutingId])?(key) =
-                routing_id
+              lks.insert_if_absent(s_name, SetIs[Key])?.set(key)
             | LocalKeysFileCommand.remove() =>
               if lks.contains(s_name) then
                 try
                   @printf[I32]("!@lks(s_name)?\n".cstring())
                   let keys = lks(s_name)?
                   if keys.contains(key) then
-                    keys.remove(key)?
+                    keys.unset(key)
                   end
                 else
                   Fail()
@@ -149,13 +142,13 @@ class LocalKeysFile
 
     // Truncate rest of file since we are rolling back to an earlier
     // checkpoint.
-    _file.set_length(_file.position())
+    // _file.set_length(_file.position())
 
-    let lks_iso = recover iso Map[StateName, Map[Key, RoutingId] val] end
+    let lks_iso = recover iso Map[StateName, SetIs[Key] val] end
     for (s, keys) in lks.pairs() do
-      let ks = recover iso Map[Key, RoutingId] end
-      for (k, r_id) in keys.pairs() do
-        ks(k) = r_id
+      let ks = recover iso SetIs[Key] end
+      for k in keys.values() do
+        ks.set(k)
       end
       lks_iso(s) = consume ks
     end

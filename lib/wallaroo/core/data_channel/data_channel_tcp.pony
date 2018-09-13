@@ -248,11 +248,11 @@ class DataChannelConnectNotifier is DataChannelNotify
         conn._mute(this)
         _data_receivers.request_data_receiver(dc.sender_name,
           dc.sender_boundary_id, dc.highest_seq_id, conn)
-      | let sm: StepMigrationMsg =>
+      | let km: KeyMigrationMsg =>
         ifdef "trace" then
-          @printf[I32]("Received StepMigrationMsg on Data Channel\n".cstring())
+          @printf[I32]("Received KeyMigrationMsg on Data Channel\n".cstring())
         end
-        _layout_initializer.receive_immigrant_step(sm)
+        _layout_initializer.receive_immigrant_key(km)
       | let m: MigrationBatchCompleteMsg =>
         ifdef "trace" then
           @printf[I32]("Received MigrationBatchCompleteMsg on Data Channel\n".cstring())

@@ -80,12 +80,13 @@ actor BarrierSource is Source
     _event_log = event_log
     _router_registry.register_producer(_source_id, this)
 
-  fun router(): Router =>
-    let rs = recover iso Array[Router] end
-    for r in _routers.values() do
-      rs.push(r)
-    end
-    MultiRouter(consume rs)
+    //!@
+  // fun router(): Router =>
+  //   let rs = recover iso Array[Router] end
+  //   for r in _routers.values() do
+  //     rs.push(r)
+  //   end
+  //   MultiRouter(consume rs)
 
   be register_pipeline(pipeline_name: String, router': Router) =>
     """
@@ -152,14 +153,6 @@ actor BarrierSource is Source
     """
     We register during initialization without need for explicit management
     here (unlike, say, TCPSource).
-    """
-    None
-
-  fun ref unknown_key(state_name: String, key: Key,
-    routing_args: RoutingArguments)
-  =>
-    """
-    We never route messages, only barriers.
     """
     None
 

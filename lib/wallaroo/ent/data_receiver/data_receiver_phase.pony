@@ -197,7 +197,6 @@ type _Queued is (_QueuedBarrier | _QueuedDeliveryMessage |
 
 type _QueuedBarrier is (RoutingId, RoutingId, BarrierToken, SeqId)
 
-// !@ We need to unify this with RoutingArguments
 class _QueuedDeliveryMessage
   let msg: DeliveryMsg
   let pipeline_time_spent: U64
@@ -220,7 +219,6 @@ class _QueuedDeliveryMessage
     dr.process_message(msg, pipeline_time_spent, seq_id, latest_ts,
       metrics_id, worker_ingress_ts)
 
-// !@ We need to unify this with RoutingArguments
 class _QueuedReplayableDeliveryMessage
   let msg: ReplayableDeliveryMsg
   let pipeline_time_spent: U64

@@ -349,8 +349,8 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         _router_registry.report_connected_to_joining_worker(m.sender)
       | let m: AnnounceNewSourceMsg =>
         _router_registry.register_remote_source(m.sender, m.source_id)
-      | let m: StepMigrationCompleteMsg =>
-        _router_registry.step_migration_complete(m.step_id)
+      | let m: KeyMigrationCompleteMsg =>
+        _router_registry.key_migration_complete(m.key)
       | let m: JoiningWorkerInitializedMsg =>
         ifdef debug then
           @printf[I32](("Rcvd JoiningWorkerInitializedMsg on Control " +

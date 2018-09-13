@@ -303,19 +303,19 @@ actor Connections is Cluster
       Fail()
     end
 
-  be notify_cluster_of_new_stateful_step(id: RoutingId, key: Key,
-    state_name: String, exclusions: Array[String] val =
-    recover Array[String] end)
-  =>
-    try
-      let migration_complete_msg =
-        ChannelMsgEncoder.step_migration_complete(id, _auth)?
-      for producer in exclusions.values() do
-        _control_conns(producer)?.writev(migration_complete_msg)
-      end
-    else
-      Fail()
-    end
+  // !@ Do we need this anymore?
+  // be notify_cluster_of_new_key(key: Key, state_name: String,
+  //   exclusions: Array[String] val = recover Array[String] end)
+  // =>
+  //   try
+  //     let migration_complete_msg =
+  //       ChannelMsgEncoder.key_migration_complete(key, _auth)?
+  //     for producer in exclusions.values() do
+  //       _control_conns(producer)?.writev(migration_complete_msg)
+  //     end
+  //   else
+  //     Fail()
+  //   end
 
   be notify_cluster_of_new_source(id: RoutingId) =>
     try
@@ -538,6 +538,7 @@ actor Connections is Cluster
     spr_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val,
     tidr_blueprints: Map[StateName, TargetIdRouterBlueprint] val,
     local_sinks: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
     router_registry: RouterRegistry, lti: LocalTopologyInitializer)
   =>
     // We delegate to router registry through here to ensure that we've
@@ -546,7 +547,7 @@ actor Connections is Cluster
 
     // We must create the target_id_router first
     router_registry.create_target_id_routers_from_blueprint(tidr_blueprints,
-      local_sinks, lti)
+      state_steps, local_sinks, lti)
     router_registry.create_partition_routers_from_blueprints(workers,
       pr_blueprints)
     router_registry.create_stateless_partition_routers_from_blueprints(

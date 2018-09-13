@@ -312,15 +312,12 @@ actor Startup
 
       _setup_shutdown_handler(connections, this, auth)
 
-      let state_step_creator = StateStepCreator(auth, _app_name,
-        _startup_options.worker_name, metrics_conn, event_log)
-
       let data_receivers = DataReceivers(auth, connections,
-        _startup_options.worker_name, state_step_creator, _is_recovering)
+        _startup_options.worker_name, _is_recovering)
 
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
-        connections, state_step_creator, this,
+        connections, this,
         _startup_options.stop_the_world_pause, _is_joining, initializer_name,
         barrier_initiator, checkpoint_initiator, autoscale_initiator,
         initializer_name)
@@ -351,7 +348,7 @@ actor Startup
           _startup_options.is_initializer, data_receivers, event_log, recovery,
           recovery_reconnecter, checkpoint_initiator, barrier_initiator,
           _local_topology_file, _data_channel_file, _worker_names_file,
-          local_keys_filepath, state_step_creator)
+          local_keys_filepath)
 
       if (_external_host != "") or (_external_service != "") then
         let external_channel_notifier =
@@ -526,15 +523,12 @@ actor Startup
 
       _setup_shutdown_handler(connections, this, auth)
 
-      let state_step_creator = StateStepCreator(auth, _app_name,
-        _startup_options.worker_name, metrics_conn, event_log)
-
       let data_receivers = DataReceivers(auth, connections,
-        _startup_options.worker_name, state_step_creator)
+        _startup_options.worker_name)
 
       let router_registry = RouterRegistry(auth,
         _startup_options.worker_name, data_receivers,
-        connections, state_step_creator, this,
+        connections, this,
         _startup_options.stop_the_world_pause, _is_joining, initializer_name,
         barrier_initiator, checkpoint_initiator, autoscale_initiator,
         m.sender_name where joining_state_routing_ids = new_state_routing_ids)
@@ -555,7 +549,7 @@ actor Startup
           _startup_options.is_initializer, data_receivers,
           event_log, recovery, recovery_reconnecter, checkpoint_initiator,
           barrier_initiator, _local_topology_file, _data_channel_file,
-          _worker_names_file, local_keys_filepath, state_step_creator
+          _worker_names_file, local_keys_filepath
           where is_joining = true,
           joining_state_routing_ids = new_state_routing_ids)
 
@@ -576,9 +570,9 @@ actor Startup
       end
 
       let data_router = DataRouter(_startup_options.worker_name,
-          recover Map[RoutingId, Consumer] end,
-          recover LocalStatePartitions end,
-          recover LocalStatePartitionIds end, consume dr_state_routing_ids)
+        recover Map[RoutingId, Consumer] end,
+        recover Map[StateName, Array[Step] val] end,
+        consume dr_state_routing_ids)
 
       router_registry.set_data_router(data_router)
       let updated_topology = m.local_topology.add_state_routing_ids(

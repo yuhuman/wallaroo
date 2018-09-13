@@ -109,7 +109,6 @@ class BarrierStepForwarder
 
   fun ref check_completion(inputs: Map[RoutingId, Producer] box) =>
     if (inputs.size() == (_inputs_blocking.size() + _removed_inputs.size()))
-      and not _step.has_pending_messages()
     then
       // @printf[I32]("!@ That was last barrier at Forwarder.  FORWARDING!\n".cstring())
       for (o_id, o) in _step.outputs().pairs() do

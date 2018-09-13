@@ -363,13 +363,6 @@ actor KafkaSink is (Sink & KafkaClientManager & KafkaProducer)
     // TODO: implement this once state save/recover is handled
     Fail()
 
-  be receive_state(state: ByteSeq val) =>
-    ifdef "trace" then
-      @printf[I32]("receive_state in %s\n".cstring(), _name.cstring())
-    end
-    // TODO: implement state recovery
-    Fail()
-
   be log_replay_finished()
   =>
     ifdef "trace" then

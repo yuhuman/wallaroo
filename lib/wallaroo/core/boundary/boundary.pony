@@ -271,8 +271,8 @@ actor OutgoingBoundary is Consumer
     checkpoint_id: CheckpointId, state: ByteSeq val)
   =>
     try
-      let outgoing_msg = ChannelMsgEncoder.migrate_step(step_id,
-        state_name, key, checkpoint_id, state, _worker_name, _auth)?
+      let outgoing_msg = ChannelMsgEncoder.migrate_key(state_name, key,
+        checkpoint_id, state, _worker_name, _auth)?
       _writev(outgoing_msg)
     else
       Fail()
@@ -372,8 +372,6 @@ actor OutgoingBoundary is Consumer
 
   be writev(data: Array[ByteSeq] val) =>
     _writev(data)
-
-  be receive_state(state: ByteSeq val) => Fail()
 
   fun ref receive_ack(seq_id: SeqId) =>
     ifdef debug then

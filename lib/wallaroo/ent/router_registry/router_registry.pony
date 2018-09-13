@@ -49,13 +49,13 @@ actor RouterRegistry
   let _data_receivers: DataReceivers
   let _worker_name: WorkerName
   let _connections: Connections
-  let _state_step_creator: StateStepCreator
   let _recovery_file_cleaner: RecoveryFileCleaner
   let _barrier_initiator: BarrierInitiator
   let _checkpoint_initiator: CheckpointInitiator
   let _autoscale_initiator: AutoscaleInitiator
   var _data_router: DataRouter
   var _pre_state_data: (Array[PreStateData] val | None) = None
+  var _local_keys: Map[StateName, SetIs[Key]] = _local_keys.create()
   let _partition_routers: Map[StateName, PartitionRouter] =
     _partition_routers.create()
   let _stateless_partition_routers: Map[U128, StatelessPartitionRouter] =
@@ -96,11 +96,6 @@ actor RouterRegistry
     Map[StateName, SetIs[_TargetIdRouterUpdatable]] =
       _target_id_router_updatables.create()
 
-  // For anyone who wants to know about every target_id_router
-  //!@ clean this up
-  let _all_target_id_router_subs: SetIs[StateStepCreator] =
-    _all_target_id_router_subs.create()
-
   // Certain TargetIdRouters need to keep track of changes to particular
   // stateless partition routers. This is true when a state step needs to
   // route outputs to a stateless partition. Map is from partition id to
@@ -136,9 +131,9 @@ actor RouterRegistry
 
   var _stop_the_world_in_process: Bool = false
 
-  // TODO: Add management of pending steps to Autoscale protocol class
-  // Steps migrated out and waiting for acknowledgement
-  let _step_waiting_list: SetIs[RoutingId] = _step_waiting_list.create()
+  // TODO: Add management of pending keys to Autoscale protocol class
+  // Keys migrated out and waiting for acknowledgement
+  let _key_waiting_list: SetIs[Key] = _key_waiting_list.create()
 
   // Workers in running cluster that have been stopped for stop the world
   let _stopped_worker_waiting_list: _StringSet =
@@ -168,7 +163,6 @@ actor RouterRegistry
 
   new create(auth: AmbientAuth, worker_name: WorkerName,
     data_receivers: DataReceivers, c: Connections,
-    state_step_creator: StateStepCreator,
     recovery_file_cleaner: RecoveryFileCleaner, stop_the_world_pause: U64,
     is_joining: Bool, initializer_name: WorkerName,
     barrier_initiator: BarrierInitiator,
@@ -181,9 +175,6 @@ actor RouterRegistry
     _worker_name = worker_name
     _data_receivers = data_receivers
     _connections = c
-    _state_step_creator = state_step_creator
-    _state_step_creator.set_router_registry(this)
-    _all_target_id_router_subs.set(_state_step_creator)
     _recovery_file_cleaner = recovery_file_cleaner
     _barrier_initiator = barrier_initiator
     _checkpoint_initiator = checkpoint_initiator
@@ -196,7 +187,7 @@ actor RouterRegistry
     _joining_state_routing_ids = joining_state_routing_ids
     _data_router = DataRouter(_worker_name,
       recover Map[RoutingId, Consumer] end,
-      recover LocalStatePartitions end, recover LocalStatePartitionIds end,
+      recover Map[StateName, Array[Step] val] end,
       recover Map[RoutingId, StateName] end)
     _initializer_name = initializer_name
     _autoscale = Autoscale(_auth, _worker_name, this, _connections, is_joining)
@@ -473,42 +464,39 @@ actor RouterRegistry
   be register_data_receiver(worker: WorkerName, dr: DataReceiver) =>
     _data_receiver_map(worker) = dr
 
-  be register_state_step(step: Step, state_name: StateName, key: Key,
-    step_id: RoutingId, checkpoint_id: (CheckpointId | None) = None)
+  be register_key(state_name: StateName, key: Key,
+    checkpoint_id: (CheckpointId | None) = None)
   =>
-    _register_state_step(step, state_name, key, step_id, checkpoint_id)
+    _register_key(state_name, key, checkpoint_id)
 
-  fun ref _register_state_step(step: Step, state_name: StateName, key: Key,
-    step_id: RoutingId, checkpoint_id: (CheckpointId | None) = None)
+  fun ref _register_key(state_name: StateName, key: Key,
+    checkpoint_id: (CheckpointId | None) = None)
   =>
-    @printf[I32]("!@ RouterRegistry: register_state_step, key: %s\n".cstring(), key.cstring())
+    @printf[I32]("!@ RouterRegistry: register_key, key: %s\n".cstring(), key.cstring())
     try
+      _local_keys.insert_if_absent(state_name, SetIs[Key])?
+      _local_keys(state_name)?.set(key)
       (_local_topology_initializer as LocalTopologyInitializer)
-        .register_state_step(state_name, key, step_id, checkpoint_id)
+        .register_key(state_name, key, checkpoint_id)
     else
       Fail()
     end
-    _add_routes_to_state_step(step_id, step, key, state_name)
-    _producers(step_id) = step
-    _state_step_creator.register_state_step(state_name, key, step_id, step)
 
-  be unregister_state_step(state_name: StateName, key: Key, step_id: RoutingId,
-    step: Step, checkpoint_id: (CheckpointId | None) = None)
+  be unregister_key(state_name: StateName, key: Key,
+    checkpoint_id: (CheckpointId | None) = None)
   =>
-    _unregister_state_step(state_name, key, step_id, step, checkpoint_id)
+    _unregister_key(state_name, key, checkpoint_id)
 
-  fun ref _unregister_state_step(state_name: StateName, key: Key,
-    id: RoutingId, step: Step, checkpoint_id: (CheckpointId | None) = None)
+  fun ref _unregister_key(state_name: StateName, key: Key,
+    checkpoint_id: (CheckpointId | None) = None)
   =>
-    @printf[I32]("!@ RouterRegistry: unregister_state_step, key: %s\n".cstring(), key.cstring())
+    @printf[I32]("!@ RouterRegistry: unregister_key, key: %s\n".cstring(), key.cstring())
     try
       (_local_topology_initializer as LocalTopologyInitializer)
-        .unregister_state_step(state_name, key, checkpoint_id)
+        .unregister_key(state_name, key, checkpoint_id)
     else
       Fail()
     end
-    move_stateful_step_to_proxy(id, step, key, state_name, checkpoint_id)
-    _unregister_producer(id)
 
   be register_producer(id: RoutingId, p: Producer) =>
     _producers(id) = p
@@ -541,10 +529,6 @@ actor RouterRegistry
 
       for updatable in _target_id_router_updatables(state_name)?.values() do
         updatable.update_target_id_router(target_id_router)
-      end
-
-      for sub in _all_target_id_router_subs.values() do
-        sub.update_target_id_router(state_name, target_id_router)
       end
 
       match _local_topology_initializer
@@ -697,6 +681,7 @@ actor RouterRegistry
 
   be create_target_id_routers_from_blueprint(
     target_id_router_blueprints: Map[StateName, TargetIdRouterBlueprint] val,
+    state_steps: Map[StateName, Array[Step] val] val,
     local_sinks: Map[RoutingId, Consumer] val,
     lti: LocalTopologyInitializer)
   =>
@@ -709,6 +694,11 @@ actor RouterRegistry
       let new_target_id_router = tidr.build_router(_worker_name, obs,
         local_sinks, _auth)
       _set_target_id_router(state_name, new_target_id_router)
+      try
+        for step in state_steps(state_name)?.values() do
+          _register_target_id_router_updatable(state_name, step)
+        end
+      end
       lti.update_target_id_router(state_name, new_target_id_router)
     end
     lti.initialize_join_initializables()
@@ -895,9 +885,9 @@ actor RouterRegistry
     end
 
   fun ref try_to_resume_processing_immediately() =>
-    if _step_waiting_list.size() == 0 then
+    if _key_waiting_list.size() == 0 then
       try
-        (_autoscale as Autoscale).all_step_migration_complete()
+        (_autoscale as Autoscale).all_key_migration_complete()
       else
         Fail()
       end
@@ -906,11 +896,19 @@ actor RouterRegistry
   /////////////////////////////////////////////////////////////////////////////
   // ROLLBACK
   /////////////////////////////////////////////////////////////////////////////
-  be rollback_state_steps(
-    rollback_keys: Map[StateName, Map[Key, RoutingId] val] val,
+  be rollback_keys(r_keys: Map[StateName, SetIs[Key] val] val,
     promise: Promise[None])
   =>
-    _state_step_creator.rollback_state_steps(rollback_keys, promise)
+    let new_keys = Map[StateName, SetIs[Key]]
+    for (state_name, keys) in r_keys.pairs() do
+      let ks = SetIs[Key]
+      for k in keys.values() do
+        ks.set(k)
+      end
+      new_keys(state_name) = ks
+    end
+    _local_keys = new_keys
+    promise(None)
 
   /////////////////////////////////////////////////////////////////////////////
   // JOINING WORKER
@@ -1150,14 +1148,14 @@ actor RouterRegistry
       try_to_resume_processing_immediately()
     end
 
-  be step_migration_complete(step_id: RoutingId) =>
+  be key_migration_complete(key: Key) =>
     """
     Step with provided step id has been created on another worker.
     """
-    _step_waiting_list.unset(step_id)
-    if (_step_waiting_list.size() == 0) then
+    _key_waiting_list.unset(key)
+    if (_key_waiting_list.size() == 0) then
       try
-        (_autoscale as Autoscale).all_step_migration_complete()
+        (_autoscale as Autoscale).all_key_migration_complete()
       else
         Fail()
       end
@@ -1261,7 +1259,7 @@ actor RouterRegistry
       // indicating whether any steps were migrated.
       (let new_partition_router, let had_steps_to_migrate) =
         partition_router.rebalance_steps_grow(_auth, consume tws, this,
-          next_checkpoint_id)
+          _local_keys(state_name)?, next_checkpoint_id)
       // TODO: It could be if had_steps_to_migrate is false then we don't
       // need to distribute the router because it didn't change. Investigate.
       _distribute_partition_router(new_partition_router)
@@ -1286,14 +1284,14 @@ actor RouterRegistry
         .cstring(), state_name.cstring(), target_workers.size())
       let partition_router = _partition_routers(state_name)?
       partition_router.rebalance_steps_shrink(target_workers, leaving_workers,
-        this, next_checkpoint_id)
+        this, _local_keys(state_name)?, next_checkpoint_id)
     else
       Fail()
       false
     end
 
-  fun ref add_to_step_waiting_list(step_id: RoutingId) =>
-    _step_waiting_list.set(step_id)
+  fun ref add_to_key_waiting_list(key: Key) =>
+    _key_waiting_list.set(key)
 
   /////////////////////////////////////////////////////////////////////////////
   // SHRINK TO FIT
@@ -1410,7 +1408,7 @@ actor RouterRegistry
     if _partition_routers.size() == 0 then
       @printf[I32](("No partitions to migrate.\n").cstring())
       try
-        (_autoscale as Autoscale).all_step_migration_complete()
+        (_autoscale as Autoscale).all_key_migration_complete()
       else
         Fail()
       end
@@ -1525,152 +1523,20 @@ actor RouterRegistry
     _unmute_request(_worker_name)
 
   /////////////////////////////////////////////////////////////////////////////
-  // Step moved off this worker or new step added to another worker
+  // Key moved onto this worker
   /////////////////////////////////////////////////////////////////////////////
-  fun ref move_stateful_step_to_proxy(id: RoutingId, step: Step, key: Key,
-    state_name: StateName, checkpoint_id: (CheckpointId | None) = None)
-  =>
-    """
-    Called when a stateful step has been migrated off this worker to another
-    worker
-    """
-    _remove_all_routes_to_step(id, step)
-    _move_step_to_proxy(id, state_name, key)
-
-  fun ref _remove_all_routes_to_step(id: RoutingId, step: Step) =>
-    for source in _sources.values() do
-      source.remove_route_to_consumer(id, step)
-    end
-    _data_router.remove_routes_to_consumer(id, step)
-
-  fun ref _move_step_to_proxy(id: RoutingId, state_name: StateName, key: Key,
-    checkpoint_id: (CheckpointId | None) = None)
-  =>
-    """
-    Called when a step has been migrated off this worker to another worker
-    """
-    _remove_step_from_data_router(state_name, key)
-    try
-      (_local_topology_initializer as LocalTopologyInitializer)
-        .unregister_state_step(state_name, key, checkpoint_id)
-    else
-      Fail()
-    end
-
-  fun ref _remove_step_from_data_router(state_name: StateName, key: Key) =>
-    let new_data_router = _data_router.remove_keyed_route(state_name, key)
-    _data_router = new_data_router
-    _distribute_data_router()
-
-//!@
-  // fun ref _add_proxy_to_target_id_router(id: RoutingId,
-  //   proxy_address: ProxyAddress)
-  // =>
-  //   match _target_id_router
-  //   | let o: TargetIdRouter =>
-  //     _target_id_router = o.update_route_to_proxy(id, proxy_address.worker)
-  //   else
-  //     Fail()
-  //   end
-
-  /////////////////////////////////////////////////////////////////////////////
-  // Step moved onto this worker
-  /////////////////////////////////////////////////////////////////////////////
-  be receive_immigrant_step(subpartition: StateSubpartitions,
+  be receive_immigrant_key(subpartition: StateSubpartitions,
     runner_builder: RunnerBuilder, reporter: MetricsReporter iso,
-    recovery_replayer: RecoveryReconnecter, msg: StepMigrationMsg)
-  =>
-    let outgoing_boundaries = recover iso Map[WorkerName, OutgoingBoundary] end
-    for (k, v) in _outgoing_boundaries.pairs() do
-      outgoing_boundaries(k) = v
-    end
-
-    match _event_log
-    | let event_log: EventLog =>
-      try
-        let target_id_router = _target_id_routers(msg.state_name())?
-        let step = Step(_auth, runner_builder(where event_log = event_log,
-          auth = _auth), consume reporter, msg.step_id(),
-          event_log, recovery_replayer,
-          consume outgoing_boundaries, _state_step_creator
-          where target_id_router = target_id_router)
-        step.receive_state(msg.state())
-        msg.update_router_registry(this, step)
-      else
-        Fail()
-      end
-    else
-      Fail()
-    end
-
-  fun ref move_proxy_to_stateful_step(id: RoutingId, step: Step,
-    key: Key, state_name: StateName, source_worker: WorkerName,
-    checkpoint_id: CheckpointId)
-  =>
-    """
-    Called when a stateful step has been migrated to this worker from another
-    worker
-    """
-    _register_state_step(step, state_name, key, id, checkpoint_id)
-    _connections.notify_cluster_of_new_stateful_step(id, key, state_name,
-      recover [source_worker] end)
-
-  fun ref _add_routes_to_state_step(id: RoutingId, target: Consumer, key: Key,
-    state_name: StateName)
+    recovery_replayer: RecoveryReconnecter, msg: KeyMigrationMsg)
   =>
     try
-      match target
-      | let step: Step =>
-        _register_target_id_router_updatable(state_name, step)
-        _data_router = _data_router.add_keyed_route(id, state_name, key, step)
-        _distribute_data_router()
-        let partition_router =
-          _partition_routers(state_name)?.update_route(id, key, step)?
-        _distribute_partition_router(partition_router)
-        _partition_routers(state_name) = partition_router
-      else
-        Fail()
-      end
+      _register_key(msg.state_name(), msg.key(), msg.checkpoint_id())
+
+      _partition_routers(msg.state_name())?
+        .receive_key_state(msg.key(), msg.state())
     else
       Fail()
     end
-    _move_proxy_to_step(id, target)
-
-  //!@
-  fun ref _move_proxy_to_step(id: RoutingId, target: Consumer)
-  =>
-    """
-    Called when a step has been migrated to this worker from another worker
-    """
-    None
-    //!@
-    // match _target_id_router
-    // | let o: TargetIdRouter =>
-    //   _target_id_router = o.update_route_to_consumer(id, target)
-    // else
-    //   Fail()
-    // end
-
-  //!@
-  fun ref _outgoing_boundaries_sorted():
-    Array[(WorkerName, OutgoingBoundary)] val
-  =>
-    let keys = Array[String]
-    for k in _outgoing_boundaries.keys() do
-      keys.push(k)
-    end
-
-    let sorted_keys = Sort[Array[String], String](keys)
-
-    let diff = recover trn Array[(String, OutgoingBoundary)] end
-    for sorted_key in sorted_keys.values() do
-      try
-        diff.push((sorted_key, _outgoing_boundaries(sorted_key)?))
-      else
-        Fail()
-      end
-    end
-    consume diff
 
   /////////////////////////////////////////////////////////////////////////////
   // EXTERNAL QUERIES
@@ -1706,8 +1572,7 @@ actor RouterRegistry
     conn.writev(msg)
 
   be state_entity_query(conn: TCPConnection) =>
-    let msg = ExternalMsgEncoder.state_entity_query_response(
-      _partition_routers)
+    let msg = ExternalMsgEncoder.state_entity_query_response(_local_keys)
     conn.writev(msg)
 
   be stateless_partition_query(conn: TCPConnection) =>
@@ -1717,7 +1582,7 @@ actor RouterRegistry
 
   be state_entity_count_query(conn: TCPConnection) =>
     let msg = ExternalMsgEncoder.state_entity_count_query_response(
-      _partition_routers)
+      _local_keys)
     conn.writev(msg)
 
   be stateless_partition_count_query(conn: TCPConnection) =>

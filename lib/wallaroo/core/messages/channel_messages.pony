@@ -52,11 +52,11 @@ primitive ChannelMsgEncoder
     _encode(DataMsg(delivery_msg, pipeline_time_spent, seq_id, latest_ts,
       metrics_id, metric_name), auth, wb)?
 
-  fun migrate_step(step_id: RoutingId, state_name: String, key: Key,
-    checkpoint_id: CheckpointId, state: ByteSeq val, worker: String,
-    auth: AmbientAuth): Array[ByteSeq] val ?
+  fun migrate_key(state_name: String, key: Key, checkpoint_id: CheckpointId,
+    state: ByteSeq val, worker: String, auth: AmbientAuth):
+    Array[ByteSeq] val ?
   =>
-    _encode(KeyedStepMigrationMsg(step_id, state_name, key, checkpoint_id, state,
+    _encode(KeyMigrationMsg(state_name, key, checkpoint_id, state,
       worker), auth)?
 
   fun migration_batch_complete(sender: String,
@@ -76,13 +76,13 @@ primitive ChannelMsgEncoder
     """
     _encode(AckMigrationBatchCompleteMsg(worker), auth)?
 
-  fun step_migration_complete(step_id: RoutingId,
+  fun key_migration_complete(key: Key,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
-    Sent when the migration of step step_id is complete
+    Sent when the migration of key is complete
     """
-    _encode(StepMigrationCompleteMsg(step_id), auth)?
+    _encode(KeyMigrationCompleteMsg(key), auth)?
 
   fun begin_leaving_migration(remaining_workers: Array[String] val,
     leaving_workers: Array[String] val, auth: AmbientAuth):
@@ -705,45 +705,28 @@ class val ReplayCompleteMsg is ChannelMsg
     sender_name = from
     boundary_id = b_id
 
-
-trait val StepMigrationMsg is ChannelMsg
-  fun state_name(): String
-  fun step_id(): RoutingId
-  fun checkpoint_id(): CheckpointId
-  fun state(): ByteSeq val
-  fun worker(): String
-  fun update_router_registry(router_registry: RouterRegistry ref,
-    step: Step)
-
-class val KeyedStepMigrationMsg is StepMigrationMsg
+class val KeyMigrationMsg is ChannelMsg
   let _state_name: String
   let _key: Key
-  let _step_id: RoutingId
   // The next checkpoint that this migrated step will be a part of
   let _checkpoint_id: CheckpointId
   let _state: ByteSeq val
   let _worker: String
 
-  new val create(step_id': U128, state_name': String, key': Key,
+  new val create(state_name': String, key': Key,
     checkpoint_id': CheckpointId, state': ByteSeq val, worker': String)
   =>
     _state_name = state_name'
     _key = key'
-    _step_id = step_id'
     _checkpoint_id = checkpoint_id'
     _state = state'
     _worker = worker'
 
   fun state_name(): String => _state_name
-  fun step_id(): RoutingId => _step_id
   fun checkpoint_id(): CheckpointId => _checkpoint_id
   fun state(): ByteSeq val => _state
+  fun key(): Key => _key
   fun worker(): String => _worker
-  fun update_router_registry(router_registry: RouterRegistry ref,
-    step: Step)
-  =>
-    router_registry.move_proxy_to_stateful_step(_step_id, step, _key,
-      _state_name, _worker, _checkpoint_id)
 
 class val MigrationBatchCompleteMsg is ChannelMsg
   let sender_name: String
@@ -769,12 +752,12 @@ class val UnmuteRequestMsg is ChannelMsg
   new val create(worker: String) =>
     originating_worker = worker
 
-class val StepMigrationCompleteMsg is ChannelMsg
-  let step_id: RoutingId
+class val KeyMigrationCompleteMsg is ChannelMsg
+  let key: Key
 
-  new val create(step_id': U128)
+  new val create(k: Key)
   =>
-    step_id = step_id'
+    key = k
 
 class val BeginLeavingMigrationMsg is ChannelMsg
   let remaining_workers: Array[String] val
@@ -886,20 +869,19 @@ trait val DeliveryMsg is ChannelMsg
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
-    route_ids_to_target_ids: Map[RouteId, RoutingId] val,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val
-  ): RouteId ?
+    route_ids_to_target_ids: Map[RouteId, RoutingId] val): RouteId ?
 
 trait val ReplayableDeliveryMsg is DeliveryMsg
   fun val replay_deliver(pipeline_time_spent: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
-    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val): RouteId ?
+    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64): RouteId ?
   fun input(): Any val
   fun metric_name(): String
   fun msg_uid(): MsgId
@@ -936,10 +918,10 @@ class val ForwardMsg[D: Any val] is ReplayableDeliveryMsg
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
-    route_ids_to_target_ids: Map[RouteId, RoutingId] val,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val): RouteId ?
+    route_ids_to_target_ids: Map[RouteId, RoutingId] val): RouteId ?
   =>
     let target_step = data_routes(_target_id)?
     ifdef "trace" then
@@ -955,11 +937,11 @@ class val ForwardMsg[D: Any val] is ReplayableDeliveryMsg
 
   fun val replay_deliver(pipeline_time_spent: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
-    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val): RouteId ?
+    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64): RouteId ?
   =>
     let target_step = data_routes(_target_id)?
     let route_id = target_ids_to_route_ids(_target_id)?
@@ -999,46 +981,48 @@ class val ForwardKeyedMsg[D: Any val] is ReplayableDeliveryMsg
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
-    route_ids_to_target_ids: Map[RouteId, RoutingId] val,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val): RouteId ?
+    route_ids_to_target_ids: Map[RouteId, RoutingId] val): RouteId ?
   =>
     ifdef "trace" then
       @printf[I32]("DataRouter found Step\n".cstring())
     end
 
     try
-      let target_step = keys_to_routes(_target_state_name, _target_key)?
-      let route_id = keys_to_route_ids(_target_state_name, _target_key)?
+      let local_state_steps = state_steps(_target_state_name)?
+      let idx =
+        (HashKey(_target_key) % local_state_steps.size().u128()).usize()
+      let target_step = local_state_steps(idx)?
+
+      let target_id = consumer_ids(target_step)?
+      let route_id = target_ids_to_route_ids(target_id)?
+
       target_step.run[D](_metric_name, pipeline_time_spent, _data, producer_id,
         producer, _msg_uid, _frac_ids, seq_id, route_id, latest_ts, metrics_id,
         worker_ingress_ts)
       route_id
     else
-      ifdef "trace" then
-        @printf[I32]("DataRouter could not find route for key %s\n".cstring(),
-          _target_key.cstring())
-      end
-      let ra = TypedDataRoutingArguments[ReplayableDeliveryMsg](_metric_name,
-        pipeline_time_spent,
-        this, producer_id, seq_id, _frac_ids, latest_ts, metrics_id,
-        worker_ingress_ts)
-      producer.unknown_key(_target_state_name, _target_key, ra)
       error
     end
 
   fun val replay_deliver(pipeline_time_spent: U64,
     data_routes: Map[RoutingId, Consumer] val,
+    state_steps: Map[StateName, Array[Step] val] val,
+    consumer_ids: MapIs[Consumer, RoutingId] val,
     target_ids_to_route_ids: Map[RoutingId, RouteId] val,
     producer_id: RoutingId, producer: Producer ref, seq_id: SeqId,
-    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
-    keys_to_routes: LocalStatePartitions val,
-    keys_to_route_ids: StatePartitionRouteIds val): RouteId ?
+    latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64): RouteId ?
   =>
     try
-      let target_step = keys_to_routes(_target_state_name, _target_key)?
-      let route_id = keys_to_route_ids(_target_state_name, _target_key)?
+      let local_state_steps = state_steps(_target_state_name)?
+      let idx =
+        (HashKey(_target_key) % local_state_steps.size().u128()).usize()
+      let target_step = local_state_steps(idx)?
+
+      let target_id = consumer_ids(target_step)?
+      let route_id = target_ids_to_route_ids(target_id)?
 
       target_step.replay_run[D](_metric_name, pipeline_time_spent,
         _data, producer_id, producer, _msg_uid, _frac_ids, seq_id, route_id,
@@ -1046,14 +1030,6 @@ class val ForwardKeyedMsg[D: Any val] is ReplayableDeliveryMsg
 
       route_id
     else
-      ifdef "trace" then
-        @printf[I32]("DataRouter could not find route for key %s\n".cstring(),
-          _target_key.cstring())
-      end
-      let ra = TypedDataReplayRoutingArguments[ReplayableDeliveryMsg](_metric_name, pipeline_time_spent,
-        this, producer_id, seq_id, _frac_ids, latest_ts, metrics_id,
-        worker_ingress_ts)
-      producer.unknown_key(_target_state_name, _target_key, ra)
       error
     end
 
