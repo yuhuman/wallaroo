@@ -18,26 +18,16 @@ use "wallaroo/core/topology"
 use "wallaroo/ent/checkpoint"
 use "wallaroo_labs/mort"
 
-class val ShippedState
-  let state_name: StateName
-  let key: Key
-  let state_bytes: ByteSeq val
-
-  new create(state_name': StateName, key': Key, state_bytes': ByteSeq val) =>
-    state_name = state_name'
-    key = key'
-    state_bytes = state_bytes'
-
 primitive StepStateMigrator
   fun receive_state(step: Step ref, runner: Runner, state_name: StateName,
-    key: Key, state: ByteSeq val)
+    key: Key, state_bytes: ByteSeq val)
   =>
     ifdef "trace" then
       @printf[I32]("Received new state\n".cstring())
     end
     match runner
     | let r: SerializableStateRunner =>
-      r.import_key_state(step, state_name, key, state)
+      r.import_key_state(step, state_name, key, state_bytes)
     else
       Fail()
     end
@@ -48,18 +38,10 @@ primitive StepStateMigrator
   =>
     match runner
     | let r: SerializableStateRunner =>
-      let shipped_state = ShippedState(state_name, key,
-        r.export_key_state(key))
-      let shipped_state_bytes =
-        try
-          Serialised(SerialiseAuth(auth), shipped_state)?
-            .output(OutputSerialisedAuth(auth))
-        else
-          Fail()
-          recover val Array[U8] end
-        end
-      boundary.migrate_step(id, state_name, key, checkpoint_id,
-        shipped_state_bytes)
+      let state_bytes = r.export_key_state(key)
+      @printf[I32]("!@ READY TO EXPORT %s bytes for key %s\n".cstring(), state_bytes.size().string().cstring(), key.cstring())
+      boundary.migrate_key(id, state_name, key, checkpoint_id,
+        state_bytes)
     else
       Fail()
     end

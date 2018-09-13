@@ -940,7 +940,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         // Keep track of all stateless partition routers we've built
         let stateless_partition_routers = Map[U128, StatelessPartitionRouter]
 
-        let built_stateless_steps = recover trn Map[U128, Consumer] end
+        let built_stateless_steps = recover trn Map[RoutingId, Consumer] end
 
         let built_state_steps = Map[String, Array[Step] val]
 
@@ -1657,6 +1657,13 @@ actor LocalTopologyInitializer is LayoutInitializer
         end
         /////
 
+        for (id, s) in built_stateless_steps.pairs() do
+          match s
+          | let p: Producer =>
+            _router_registry.register_producer(id, p)
+          end
+        end
+
         for (k, v) in data_routes_ref.pairs() do
           data_routes(k) = v
         end
@@ -1888,6 +1895,13 @@ actor LocalTopologyInitializer is LayoutInitializer
         //!@
         for (k, v) in sendable_state_steps.pairs() do
           @printf[I32]("!@ -- k: %s, size: %s\n".cstring(), k.cstring(), v.size().string().cstring())
+        end
+
+        for (id, s) in built_stateless_steps.pairs() do
+          match s
+          | let p: Producer =>
+            _router_registry.register_producer(id, p)
+          end
         end
 
         let data_routes = recover iso Map[RoutingId, Consumer] end

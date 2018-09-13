@@ -264,8 +264,10 @@ actor BarrierSource is Source
       match o
       | let ob: OutgoingBoundary =>
         // @printf[I32]("!@ BarrierSource: barrier over boundary to %s!\n".cstring(), o_id.string().cstring())
+        @printf[I32]("!@ BarrierSource: sending over OutgoingBoundary to %s\n".cstring(), o_id.string().cstring())
         ob.forward_barrier(o_id, _source_id, token)
       else
+        @printf[I32]("!@ BarrierSource: sending to step %s\n".cstring(), o_id.string().cstring())
         o.receive_barrier(_source_id, this, token)
       end
     end

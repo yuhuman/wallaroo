@@ -133,7 +133,7 @@ actor RouterRegistry
 
   // TODO: Add management of pending keys to Autoscale protocol class
   // Keys migrated out and waiting for acknowledgement
-  let _key_waiting_list: SetIs[Key] = _key_waiting_list.create()
+  let _key_waiting_list: _StringSet = _key_waiting_list.create()
 
   // Workers in running cluster that have been stopped for stop the world
   let _stopped_worker_waiting_list: _StringSet =
@@ -671,6 +671,7 @@ actor RouterRegistry
     end
 
   be create_partition_routers_from_blueprints(workers: Array[WorkerName] val,
+    state_steps: Map[StateName, Array[Step] val] val,
     partition_blueprints: Map[StateName, PartitionRouterBlueprint] val)
   =>
     let obs_trn = recover trn Map[WorkerName, OutgoingBoundary] end
@@ -679,13 +680,15 @@ actor RouterRegistry
     end
     let obs = consume val obs_trn
     for (s, b) in partition_blueprints.pairs() do
-      let next_router = b.build_router(_worker_name, workers, obs, _auth)
-      _distribute_partition_router(next_router)
-      _partition_routers(s) = next_router
       try
+        let local_state_steps = state_steps(s)?
+        let next_router = b.build_router(_worker_name, workers,
+          local_state_steps, obs, _auth)
+        _distribute_partition_router(next_router)
+        _partition_routers(s) = next_router
         _local_keys.insert_if_absent(s, SetIs[Key])?
       else
-        Unreachable()
+        Fail()
       end
     end
 
@@ -1180,12 +1183,15 @@ actor RouterRegistry
     """
     Step with provided step id has been created on another worker.
     """
-    _key_waiting_list.unset(key)
-    if (_key_waiting_list.size() == 0) then
-      try
-        (_autoscale as Autoscale).all_key_migration_complete()
-      else
-        Fail()
+    @printf[I32]("!@ RouterRegistry: key_migration_complete for key %s with %s in there\n".cstring(), key.cstring(), _key_waiting_list.size().string().cstring())
+    if _key_waiting_list.size() > 0 then
+      _key_waiting_list.unset(key)
+      if (_key_waiting_list.size() == 0) then
+        try
+          (_autoscale as Autoscale).all_key_migration_complete()
+        else
+          Fail()
+        end
       end
     end
 
@@ -1562,6 +1568,7 @@ actor RouterRegistry
 
       _partition_routers(msg.state_name())?
         .receive_key_state(msg.key(), msg.state())
+      _connections.notify_cluster_of_new_key(msg.key(), msg.state_name())
     else
       Fail()
     end

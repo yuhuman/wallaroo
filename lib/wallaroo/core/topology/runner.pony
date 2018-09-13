@@ -663,42 +663,58 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
   =>
-    @printf[I32]("!@ Importing key state for %s:%s\n".cstring(), s_name.cstring(), key.cstring())
+    @printf[I32]("!@ Importing key state for <%s: %s>, size: %s\n".cstring(), s_name.cstring(), key.cstring(), s.size().string().cstring())
     ifdef debug then
       Invariant(s_name == _state_name)
     end
-    try
-      _rb.append(s as Array[U8] val)
-      //!@
-      // reader.append(_rb.block(s.size()))?
-      match _canonical_state.read_log_entry(_rb, _auth)?
-      | let state: S =>
+    if s.size() > 0 then
+      try
+        @printf[I32]("!@ _rb should be empty. Has %s bytes\n".cstring(), _rb.size().string().cstring())
+        _rb.append(s as Array[U8] val)
         //!@
-        match state
-        | let st: Stringablike =>
-          try
-            match _state_map(s_name)?
-            | let st2: Stringablike =>
-              (let sec', let ns') = Time.now()
-              let us' = ns' / 1000
-              let ts' = PosixDate(sec', ns').format("%Y-%m-%d %H:%M:%S." + us'.string())
-              @printf[I32]("!@ DESERIALIZE (%s): old %s replaced by new %s on step %s with tag %s\n".cstring(), ts'.cstring(), st.string().cstring(), st2.string().cstring(), _id.string().cstring(), (digestof this).string().cstring())
-            end
+        // reader.append(_rb.block(s.size()))?
+        match _canonical_state.read_log_entry(_rb, _auth)?
+        | let state: S =>
+          //!@
+          match state
+          | let st: Stringablike =>
+            // try
+              // match _state_map(s_name)?
+              // | let st2: Stringablike =>
+                (let sec', let ns') = Time.now()
+                let us' = ns' / 1000
+                let ts' = PosixDate(sec', ns').format("%Y-%m-%d %H:%M:%S." + us'.string())
+                @printf[I32]("!@ DESERIALIZE (%s): loading new %s on step %s with tag %s\n".cstring(), ts'.cstring(), st.string().cstring(), _id.string().cstring(), (digestof this).string().cstring())
+              // end
+            // end
           end
-        end
 
-        _state_map(key) = state
-        step.register_key(s_name, key)
+          @printf[I32]("!@ Successfully imported key %s\n".cstring(), key.cstring())
+          _state_map(key) = state
+          step.register_key(s_name, key)
+        else
+          Fail()
+        end
       else
         Fail()
       end
     else
-      Fail()
+      // We got the key but no accompanying state, so we initialize
+      // ourselves.
+      _state_map(key) = _state_builder()
+      step.register_key(s_name, key)
     end
 
   fun ref export_key_state(key: Key): ByteSeq val =>
     try
-      let state = _state_map.remove(key)?._2
+      @printf[I32]("!@ exporting key %s\n".cstring(), key.cstring())
+      let state =
+        try
+          _state_map.remove(key)?._2
+        else
+          _state_builder()
+        end
+      @printf[I32]("!@ removed state for %s\n".cstring(), key.cstring())
       Serialised(SerialiseAuth(_auth), state)?
         .output(OutputSerialisedAuth(_auth))
     else
@@ -709,6 +725,7 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
   fun ref serialize_state(): ByteSeq val =>
     try
       let bytes = recover iso Array[U8] end
+      @printf[I32]("!@ serialize_state: state_map is %s size\n".cstring(), _state_map.size().string().cstring())
       for (k, state) in _state_map.pairs() do
         //!@
         match state
@@ -719,6 +736,7 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
             us'.string())
           @printf[I32]("!@ SERIALIZE (%s): %s on step %s with tag %s\n".cstring(), ts'.cstring(), s.string().cstring(), _id.string().cstring(), (digestof this).string().cstring())
         end
+        @printf[I32]("!@ SERIALIZING KEY %s\n".cstring(), k.cstring())
 
         let key_size = k.size()
         _wb.u32_be(key_size.u32())
@@ -727,9 +745,17 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
           .output(OutputSerialisedAuth(_auth))
         _wb.u32_be(s_bytes.size().u32())
         _wb.write(s_bytes)
+        @printf[I32]("!@ Wrote %s key bytes and %s state bytes\n".cstring(), key_size.string().cstring(), s_bytes.size().string().cstring())
       end
       for bs in _wb.done().values() do
-        bytes.append(bs)
+        match bs
+        | let s: String =>
+          bytes.append(s)
+        | let a: Array[U8] val =>
+          for b in a.values() do
+            bytes.push(b)
+          end
+        end
       end
       consume bytes
     else
@@ -741,30 +767,33 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
     _state_map.clear()
     try
       let reader: Reader ref = Reader
+      var bytes_left: USize = payload.size()
       _rb.append(payload as Array[U8] val)
-      while _rb.size() > 0 do
+      @printf[I32]("!@ -- Preparing to read %s bytes for payload\n".cstring(), bytes_left.string().cstring())
+      while bytes_left > 0 do
         let key_size = _rb.u32_be()?.usize()
+        bytes_left = bytes_left - 4
         let key = String.from_array(_rb.block(key_size)?)
+        bytes_left = bytes_left - key_size
         let state_size = _rb.u32_be()?.usize()
+        bytes_left = bytes_left - 4
         reader.append(_rb.block(state_size)?)
+        bytes_left = bytes_left - state_size
         match _canonical_state.read_log_entry(reader, _auth)?
         | let state: S =>
           //!@
-          try
-            let old_state = _state_map(key)?
-            match old_state
+          // try
+            match state
             | let st: Stringablike =>
-              match state
-              | let st2: Stringablike =>
-                (let sec', let ns') = Time.now()
-                let us' = ns' / 1000
-                let ts' = PosixDate(sec', ns').format("%Y-%m-%d %H:%M:%S." +
-                  us'.string())
-                @printf[I32]("!@ DESERIALIZE (%s): old %s replaced by new %s on step %s with tag %s\n".cstring(), ts'.cstring(), st.string().cstring(), st2.string().cstring(), _id.string().cstring(), (digestof this).string().cstring())
-              end
+              (let sec', let ns') = Time.now()
+              let us' = ns' / 1000
+              let ts' = PosixDate(sec', ns').format("%Y-%m-%d %H:%M:%S." +
+                us'.string())
+              @printf[I32]("!@ DESERIALIZE (%s): loading new state %s on step %s with tag %s\n".cstring(), ts'.cstring(), st.string().cstring(), _id.string().cstring(), (digestof this).string().cstring())
             end
-          end
+          // end
 
+          @printf[I32]("!@ OVERWRITING STATE FOR KEY %s\n".cstring(), key.cstring())
           _state_map(key) = state
         else
           Fail()

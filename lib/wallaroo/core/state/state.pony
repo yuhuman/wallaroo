@@ -32,14 +32,18 @@ trait ref State
 
   fun read_log_entry(in_reader: Reader, auth: AmbientAuth): State ? =>
     try
+      @printf[I32]("!@ State read_log_entry: BEFORE data, with %s reader bytes\n".cstring(), in_reader.size().string().cstring())
       let data: Array[U8] iso = in_reader.block(in_reader.size())?
+      @printf[I32]("!@ State read_log_entry: AFTER data, with %s data bytes\n".cstring(), data.size().string().cstring())
       match Serialised.input(InputSerialisedAuth(auth), consume data)(
         DeserialiseAuth(auth))?
       | let s: State => s
       else
+        @printf[I32]("!@ Ouch serialise gives something weird\n".cstring())
         error
       end
     else
+      @printf[I32]("!@ Ouch serialise errors\n".cstring())
       error
     end
 

@@ -303,19 +303,15 @@ actor Connections is Cluster
       Fail()
     end
 
-  // !@ Do we need this anymore?
-  // be notify_cluster_of_new_key(key: Key, state_name: String,
-  //   exclusions: Array[String] val = recover Array[String] end)
-  // =>
-  //   try
-  //     let migration_complete_msg =
-  //       ChannelMsgEncoder.key_migration_complete(key, _auth)?
-  //     for producer in exclusions.values() do
-  //       _control_conns(producer)?.writev(migration_complete_msg)
-  //     end
-  //   else
-  //     Fail()
-  //   end
+  be notify_cluster_of_new_key(key: Key, state_name: String) =>
+    try
+      @printf[I32]("!@ Notify cluster about key %s\n".cstring(), key.cstring())
+      let migration_complete_msg =
+        ChannelMsgEncoder.key_migration_complete(key, _auth)?
+      _send_control_to_cluster(migration_complete_msg)
+    else
+      Fail()
+    end
 
   be notify_cluster_of_new_source(id: RoutingId) =>
     try
@@ -549,7 +545,7 @@ actor Connections is Cluster
     router_registry.create_target_id_routers_from_blueprint(tidr_blueprints,
       state_steps, local_sinks, lti)
     router_registry.create_partition_routers_from_blueprints(workers,
-      pr_blueprints)
+      state_steps, pr_blueprints)
     router_registry.create_stateless_partition_routers_from_blueprints(
       spr_blueprints)
 

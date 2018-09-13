@@ -496,9 +496,22 @@ class val StateStepRouter is TargetIdRouter
       try
         let target = _consumers(target_id)?
 
+        //!@
+        match target
+        | let ob: OutgoingBoundary =>
+          @printf[I32]("!@ Looking for OutgoingBoundary\n".cstring())
+        | let s: Step =>
+          @printf[I32]("!@ Looking for Step\n".cstring())
+        | let s: Sink =>
+          @printf[I32]("!@ Looking for Sink\n".cstring())
+        else
+          @printf[I32]("!@ Looking for some Consumer that's not a boundary, step, or sink.\n".cstring())
+        end
+
         let might_be_route = producer.route_to(target)
         match might_be_route
         | let r: Route =>
+          @printf[I32]("!@ FOUND IT!\n".cstring())
           ifdef "trace" then
             @printf[I32]("StateStepRouter found Route to Step\n".cstring())
           end
@@ -1209,6 +1222,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
   fun receive_key_state(key: Key, state: ByteSeq val) =>
     let idx = (HashKey(key) % _state_steps.size().u128()).usize()
     try
+      @printf[I32]("!@ receive_key_state: state_steps size: %s, idx: %s\n".cstring(), _state_steps.size().string().cstring(), idx.string().cstring())
       let step = _state_steps(idx)?
       step.receive_key_state(_state_name, key, state)
     else
@@ -1506,7 +1520,8 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
 
 trait val PartitionRouterBlueprint
   fun build_router(worker_name: String, workers: Array[String] val,
-    outgoing_boundaries: Map[String, OutgoingBoundary] val,
+    state_steps: Array[Step] val,
+    outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
     auth: AmbientAuth): PartitionRouter
 
 class val LocalPartitionRouterBlueprint[S: State ref]
@@ -1523,16 +1538,17 @@ class val LocalPartitionRouterBlueprint[S: State ref]
     _state_routing_ids = state_routing_ids
 
   fun build_router(worker_name: String, workers: Array[String] val,
-    outgoing_boundaries: Map[String, OutgoingBoundary] val,
+    state_steps: Array[Step] val,
+    outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
     auth: AmbientAuth): PartitionRouter
   =>
-    let hashed_node_routes = recover trn Map[String, HashedProxyRouter] end
+    let hashed_node_routes = recover trn Map[WorkerName, HashedProxyRouter] end
     for (w, b) in outgoing_boundaries.pairs() do
       hashed_node_routes(w) = HashedProxyRouter(worker_name, b, _state_name,
         auth)
     end
-    let current_workers = Array[String]
-    let joining_workers = recover trn Array[String] end
+    let current_workers = Array[WorkerName]
+    let joining_workers = recover trn Array[WorkerName] end
     for c in _hash_partitions.claimants() do
       current_workers.push(c)
     end
@@ -1550,7 +1566,7 @@ class val LocalPartitionRouterBlueprint[S: State ref]
       end
 
     LocalPartitionRouter[S](_state_name, worker_name,
-      recover val Array[Step] end, recover Map[RoutingId, Step] end,
+      state_steps, recover Map[RoutingId, Step] end,
       consume hashed_node_routes, new_hash_partitions, _state_routing_ids)
 
 trait val StatelessPartitionRouter is Router

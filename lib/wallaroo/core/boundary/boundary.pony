@@ -256,6 +256,9 @@ actor OutgoingBoundary is Consumer
     end
 
   be reconnect() =>
+    _reconnect()
+
+  fun ref _reconnect() =>
     if not _connected and not _no_more_reconnect then
       _connect_count = @pony_os_connect_tcp[U32](this,
         _host.cstring(), _service.cstring(),
@@ -267,7 +270,7 @@ actor OutgoingBoundary is Consumer
       + "\n").cstring())
     @printf[I32]("!@ reconnect() RE-Connecting OutgoingBoundary %s to %s:%s on %s\n".cstring(), _step_id.string().cstring(), _host.cstring(), _service.cstring(), _target_worker.cstring())
 
-  be migrate_step(step_id: RoutingId, state_name: String, key: Key,
+  be migrate_key(step_id: RoutingId, state_name: String, key: Key,
     checkpoint_id: CheckpointId, state: ByteSeq val)
   =>
     try
@@ -594,6 +597,7 @@ actor OutgoingBoundary is Consumer
     end
     _host = host
     _service = service
+    _reconnect()
 
   ///////////
   // TCP

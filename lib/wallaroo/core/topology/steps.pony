@@ -445,13 +445,13 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     _routes.contains(c)
 
   be register_producer(id: RoutingId, producer: Producer) =>
-    // @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     _inputs(id) = producer
     _upstreams.set(producer)
 
   be unregister_producer(id: RoutingId, producer: Producer) =>
-    // @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     if _inputs.contains(id) then
       try
@@ -545,7 +545,7 @@ actor Step is (Producer & Consumer & BarrierProcessor)
   fun ref process_barrier(step_id: RoutingId, producer: Producer,
     barrier_token: BarrierToken)
   =>
-    @printf[I32]("!@ Step %s process_barrier %s from %s\n".cstring(), _id.string().cstring(), barrier_token.string().cstring(), step_id.string().cstring())
+    // @printf[I32]("!@ Step %s process_barrier %s from %s\n".cstring(), _id.string().cstring(), barrier_token.string().cstring(), step_id.string().cstring())
     if _inputs.contains(step_id) then
       // @printf[I32]("!@ Receive Barrier %s at Step %s\n".cstring(), barrier_token.string().cstring(), _id.string().cstring())
       match barrier_token
