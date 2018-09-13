@@ -194,6 +194,11 @@ actor EventLog
     _backend.encode_checkpoint_id(checkpoint_id)
     _phase.checkpoint_id_written(checkpoint_id)
 
+  fun ref update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
+  =>
+    // We need to update the next checkpoint id we're expecting.
+    _phase = _NormalEventLogPhase(checkpoint_id + 1, this)
+
   fun ref checkpoint_complete(checkpoint_id: CheckpointId) =>
     // @printf[I32]("!@ EventLog: checkpoint_complete()\n".cstring())
     write_log()
@@ -202,10 +207,14 @@ actor EventLog
   /////////////////
   // ROLLBACK
   /////////////////
-  be prepare_for_rollback(origin: (Recovery | Promise[None])) =>
+  be prepare_for_rollback(origin: (Recovery | Promise[None]),
+    checkpoint_initiator: CheckpointInitiator)
+  =>
+    checkpoint_initiator.clear_timers()
     for r in _resilients.values() do
       r.prepare_for_rollback()
     end
+    checkpoint_initiator.clear_timers()
     match origin
     | let r: Recovery =>
       //!@ Currently we are immediately moving on without checking for other

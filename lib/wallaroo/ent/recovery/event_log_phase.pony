@@ -92,6 +92,9 @@ class _NormalEventLogPhase is _EventLogPhase
     // @printf[I32]("!@ _NormalEventLogPhase: checkpoint_state() for checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
 
     ifdef debug then
+      if checkpoint_id != _next_checkpoint_id then
+        @printf[I32]("!@ EventLogPhase: checkpoint_state(): rcvd: %s, expected: %s\n".cstring(), checkpoint_id.string().cstring(), _next_checkpoint_id.string().cstring())
+      end
       Invariant(checkpoint_id == _next_checkpoint_id)
     end
     ifdef "trace" then
@@ -105,7 +108,7 @@ class _NormalEventLogPhase is _EventLogPhase
     end
 
   fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
-    None
+    _event_log.update_normal_event_log_checkpoint_id(checkpoint_id)
 
   fun name(): String => "_NormalEventLogPhase"
 

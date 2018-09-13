@@ -69,15 +69,33 @@ actor CheckpointInitiator is Initializable
     _checkpoint_id_file = checkpoint_ids_file
     _is_recovering = is_recovering
     @printf[I32]("!@ CheckpointInitiator: is_recovering: %s\n".cstring(), _is_recovering.string().cstring())
-    if _is_recovering then
+
+  be initialize_checkpoint_id(
+    ids: ((CheckpointId, RollbackId) | None) = None)
+  =>
+    """
+    Passing in ids here means that we are using external information to
+    initialize (like in a join).
+    """
+    match ids
+    | (let cid: CheckpointId, let rid: RollbackId) =>
+      @printf[I32]("!@ CheckpointInitiator: initializing cid/rid to %s/%s\n".cstring(), cid.string().cstring(), rid.string().cstring())
       ifdef "resilience" then
-        _load_latest_checkpoint_id()
-      end
-    else
-      ifdef "resilience" then
+        _commit_checkpoint_id(cid, rid)
+        @printf[I32]("!@ -- Writing cid %s to event log\n".cstring(), _current_checkpoint_id.string().cstring())
         _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
       end
-      _save_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
+    else
+      if _is_recovering then
+        ifdef "resilience" then
+          _load_latest_checkpoint_id()
+        end
+      else
+        ifdef "resilience" then
+          _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
+        end
+        _commit_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
+      end
     end
 
   be application_begin_reporting(initializer: LocalTopologyInitializer) =>
@@ -108,6 +126,9 @@ actor CheckpointInitiator is Initializable
 
   be lookup_next_checkpoint_id(p: Promise[CheckpointId]) =>
     p(_last_complete_checkpoint_id + 1)
+
+  be lookup_checkpoint_id(p: Promise[(CheckpointId, RollbackId)]) =>
+    p((_last_complete_checkpoint_id, _last_rollback_id))
 
   be initiate_checkpoint() =>
     _initiate_checkpoint()
@@ -236,6 +257,13 @@ actor CheckpointInitiator is Initializable
     end
     _phase = _WaitingCheckpointInitiatorPhase
 
+  be clear_timers() =>
+    _clear_timers()
+
+  fun ref _clear_timers() =>
+    _timers.dispose()
+    _timers = Timers
+
   be initiate_rollback(
     recovery_promise: Promise[CheckpointRollbackBarrierToken],
     worker: WorkerName)
@@ -247,8 +275,7 @@ actor CheckpointInitiator is Initializable
       end
 
       // Clear any pending checkpoint
-      _timers.dispose()
-      _timers = Timers
+      _clear_timers()
 
       let rollback_id = _last_rollback_id + 1
       _last_rollback_id = rollback_id
@@ -292,14 +319,19 @@ actor CheckpointInitiator is Initializable
     sender: WorkerName)
   =>
     if sender == _primary_worker then
-      _current_checkpoint_id = checkpoint_id
-      _last_complete_checkpoint_id = checkpoint_id
-      _last_rollback_id = rollback_id
-      _save_checkpoint_id(checkpoint_id, rollback_id)
+      _commit_checkpoint_id(checkpoint_id, rollback_id)
     else
       @printf[I32](("CommitCheckpointIdMsg received from worker that is " +
         "not the primary for checkpoints. Ignoring.\n").cstring())
     end
+
+  fun ref _commit_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
+  =>
+    _current_checkpoint_id = checkpoint_id
+    _last_complete_checkpoint_id = checkpoint_id
+    _last_rollback_id = rollback_id
+    _save_checkpoint_id(checkpoint_id, rollback_id)
 
   fun ref _save_checkpoint_id(checkpoint_id: CheckpointId,
     rollback_id: RollbackId)
