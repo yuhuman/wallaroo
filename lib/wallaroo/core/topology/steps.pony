@@ -531,7 +531,8 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     end
 
   fun ref register_key(state_name: StateName, key: Key) =>
-    _router_registry.unregister_key(state_name, key)
+    @printf[I32]("!@ Step: Registering key %s with RouterRegistry\n".cstring(), key.cstring())
+    _router_registry.register_key(state_name, key)
 
   //////////////
   // BARRIER
