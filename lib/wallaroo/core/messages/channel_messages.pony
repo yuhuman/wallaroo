@@ -499,21 +499,21 @@ primitive ChannelMsgEncoder
     """
     _encode(PrepareForRollbackMsg(sender), auth)?
 
-  fun rollback_topology_graph(sender: WorkerName, checkpoint_id: CheckpointId,
+  fun rollback_local_keys(sender: WorkerName, checkpoint_id: CheckpointId,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
     Sent to all workers in cluster by recovering worker.
     """
-    _encode(RollbackTopologyGraphMsg(sender, checkpoint_id), auth)?
+    _encode(RollbackLocalKeysMsg(sender, checkpoint_id), auth)?
 
-  fun ack_rollback_topology_graph(sender: WorkerName, checkpoint_id: CheckpointId,
+  fun ack_rollback_local_keys(sender: WorkerName, checkpoint_id: CheckpointId,
     auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     """
     Sent to ack rolling back topology graph.
     """
-    _encode(AckRollbackTopologyGraphMsg(sender, checkpoint_id), auth)?
+    _encode(AckRollbackLocalKeysMsg(sender, checkpoint_id), auth)?
 
   fun register_producers(sender: WorkerName, auth: AmbientAuth):
     Array[ByteSeq] val ?
@@ -1376,7 +1376,7 @@ class val PrepareForRollbackMsg is ChannelMsg
   new val create(sender': WorkerName) =>
     sender = sender'
 
-class val RollbackTopologyGraphMsg is ChannelMsg
+class val RollbackLocalKeysMsg is ChannelMsg
   let sender: WorkerName
   let checkpoint_id: CheckpointId
 
@@ -1384,7 +1384,7 @@ class val RollbackTopologyGraphMsg is ChannelMsg
     sender = sender'
     checkpoint_id = s_id
 
-class val AckRollbackTopologyGraphMsg is ChannelMsg
+class val AckRollbackLocalKeysMsg is ChannelMsg
   let sender: WorkerName
   let checkpoint_id: CheckpointId
 

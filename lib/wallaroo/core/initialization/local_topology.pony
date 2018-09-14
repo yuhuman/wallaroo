@@ -672,7 +672,7 @@ actor LocalTopologyInitializer is LayoutInitializer
   =>
     _target_id_router_blueprints(state_name) = target_id_router.blueprint()
 
-  be rollback_topology_graph(checkpoint_id: CheckpointId,
+  be rollback_local_keys(checkpoint_id: CheckpointId,
     promise: Promise[None])
   =>
     @printf[I32]("Rolling back topology graph.\n".cstring())

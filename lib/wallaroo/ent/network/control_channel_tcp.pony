@@ -513,21 +513,21 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         // placeholder.
         let promise = Promise[None]
         _event_log.prepare_for_rollback(promise)
-      | let m: RollbackTopologyGraphMsg =>
-        @printf[I32]("!@ Rcvd RollbackTopologyGraphMsg\n".cstring())
+      | let m: RollbackLocalKeysMsg =>
+        @printf[I32]("!@ Rcvd RollbackLocalKeysMsg\n".cstring())
         let promise = Promise[None]
         promise.next[None]({(n: None) =>
           try
-            let msg = ChannelMsgEncoder.ack_rollback_topology_graph( _worker_name, m.checkpoint_id, _auth)?
+            let msg = ChannelMsgEncoder.ack_rollback_local_keys( _worker_name, m.checkpoint_id, _auth)?
             _connections.send_control(m.sender, msg)
           else
             Fail()
           end
         })
-        _layout_initializer.rollback_topology_graph(m.checkpoint_id,
+        _layout_initializer.rollback_local_keys(m.checkpoint_id,
           promise)
-      | let m: AckRollbackTopologyGraphMsg =>
-        _recovery.worker_ack_topology_rollback(m.sender, m.checkpoint_id)
+      | let m: AckRollbackLocalKeysMsg =>
+        _recovery.worker_ack_local_keys_rollback(m.sender, m.checkpoint_id)
       | let m: RegisterProducersMsg =>
         let promise = Promise[None]
         promise.next[None]({(n: None) =>
