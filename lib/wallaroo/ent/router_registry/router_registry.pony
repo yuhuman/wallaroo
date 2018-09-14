@@ -1424,12 +1424,6 @@ actor RouterRegistry
     This should only be called on the worker contacted via an external
     message to initiate a shrink.
     """
-    try
-      (_autoscale as Autoscale).initiate_shrink(remaining_workers,
-        leaving_workers)
-    else
-      Fail()
-    end
     if ArrayHelpers[WorkerName].contains[WorkerName](leaving_workers,
       _worker_name)
     then
