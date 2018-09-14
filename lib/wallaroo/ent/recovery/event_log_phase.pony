@@ -108,7 +108,7 @@ class _NormalEventLogPhase is _EventLogPhase
     end
 
   fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
-    None
+    _event_log.update_normal_event_log_checkpoint_id(checkpoint_id)
 
   fun name(): String => "_NormalEventLogPhase"
 
