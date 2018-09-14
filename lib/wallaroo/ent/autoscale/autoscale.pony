@@ -315,6 +315,7 @@ class Autoscale
 
   fun ref all_leaving_workers_finished(leaving_workers: Array[WorkerName] val)
   =>
+    @printf[I32]("!@ Autoscale: all_leaving_workers_finished\n".cstring())
     _phase = _WaitingForResumeTheWorld(this, _auth
       where is_coordinator = false)
     _router_registry.all_leaving_workers_finished(leaving_workers)
@@ -939,6 +940,7 @@ class _ShrinkInProgress is _AutoscalePhase
   fun name(): String => "ShrinkInProgress"
 
   fun ref leaving_worker_finished_migration(worker: WorkerName) =>
+    @printf[I32]("!@ autoscale: leaving_worker_finished_migration from %s\n".cstring(), worker.cstring())
     ifdef debug then
       Invariant(_leaving_workers_waiting_list.size() > 0)
     end
