@@ -30,17 +30,19 @@ class Autoscale
 
     JOIN (coordinator):
     1) _WaitingForJoiners: Waiting for provided number of workers to connect
-    2) _WaitingForJoinerInitialization: Waiting for all joiners to initialize
-    3) _WaitingForConnections: Waiting for current workers to connect to
+    2) _InjectAutoscaleBarrier: Stop the world and inject barrier to ensure in
+       flight messages are finished
+    3) _WaitingForJoinerInitialization: Waiting for all joiners to initialize
+    4) _WaitingForConnections: Waiting for current workers to connect to
       joiners
-    4) _WaitingForJoinMigration: We currently delegate coordination of
+    5) _WaitingForJoinMigration: We currently delegate coordination of
       in flight acking and migration back to RouterRegistry. We wait for join
       migration to finish from our side (i.e. we've sent all steps).
       TODO: Handle these remaining phases here.
-    5) _WaitingForJoinMigrationAcks: We wait for new workers to ack incoming
+    6) _WaitingForJoinMigrationAcks: We wait for new workers to ack incoming
       join migration.
-    6) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
-    7) _WaitingForAutoscale: Autoscale is complete and we are back to our
+    7) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
+    8) _WaitingForAutoscale: Autoscale is complete and we are back to our
       initial waiting state.
 
     JOIN (non-coordinator):
@@ -118,6 +120,17 @@ class Autoscale
       current_worker_count)
     _phase.worker_join(conn, worker, worker_count, local_topology,
       current_worker_count)
+
+  fun ref inject_autoscale_barrier(connected_joiners: _StringSet,
+    joining_worker_count: USize)
+  =>
+    _phase = _InjectAutoscaleBarrier(_auth, this, _router_registry,
+      connected_joiners, joining_worker_count)
+
+  fun ref grow_autoscale_barrier_complete(conn: TCPConnection,
+    local_topology: LocalTopology)
+  =>
+    _phase.grow_autoscale_barrier_complete(conn, local_topology)
 
   fun ref wait_for_joiner_initialization(joining_worker_count: USize,
     initialized_workers: _StringSet,
@@ -295,6 +308,12 @@ trait _AutoscalePhase
     _invalid_call()
     Fail()
 
+  fun ref grow_autoscale_barrier_complete(conn: TCPConnection,
+    local_topology: LocalTopology)
+  =>
+    _invalid_call()
+    Fail()
+
   fun ref joining_worker_initialized(worker: WorkerName,
     state_routing_ids: Map[StateName, RoutingId] val)
   =>
@@ -364,7 +383,9 @@ class _WaitingForJoiners is _AutoscalePhase
   let _autoscale: Autoscale ref
   let _router_registry: RouterRegistry ref
   let _joining_worker_count: USize
-  let _connected_joiners: _StringSet = _connected_joiners.create()
+  let _connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)] =
+    _connected_joiners.create()
+  //!@
   let _initialized_workers: _StringSet = _initialized_workers.create()
   var _new_state_routing_ids:
     Map[WorkerName, Map[StateName, RoutingId] val] iso =
@@ -415,17 +436,64 @@ class _WaitingForJoiners is _AutoscalePhase
         Fail()
       end
     else
-      _router_registry.inform_joining_worker(conn, worker, local_topology)
-      _connected_joiners.set(worker)
+      _connected_joiners(worker) = (conn, local_topology)
       if _connected_joiners.size() == _joining_worker_count then
-        let new_state_routing_ids:
-          Map[WorkerName, Map[StateName, RoutingId] val] val =
-            (_new_state_routing_ids = recover Map[WorkerName, Map[StateName,
-              RoutingId] val] end)
-        _autoscale.wait_for_joiner_initialization(_joining_worker_count,
-          _initialized_workers, new_state_routing_ids, _current_worker_count)
+        _autoscale.inject_autoscale_barrier(_auth, _connected_joiners,
+          _joining_worker_count)
       end
     end
+
+  fun ref joining_worker_initialized(worker: WorkerName,
+    state_routing_ids: Map[StateName, RoutingId] val)
+  =>
+    //!@ I'd rather this not be possible
+    Fail()
+
+    // It's possible some workers will be initialized when we're still in
+    // this phase. We need to keep track of this to hand off that info to
+    // the next phase.
+    _initialized_workers.set(worker)
+    _new_state_routing_ids(worker) = state_routing_ids
+    if _initialized_workers.size() >= _joining_worker_count then
+      // We should have already transitioned to the next phase before this.
+      Fail()
+    end
+
+class _InjectAutoscaleBarrier is _AutoscalePhase
+  let _auth: AmbientAuth
+  let _autoscale: Autoscale ref
+  let _router_registry: RouterRegistry ref
+  let _connected_joiners: Map[WorkerName, TCPConnection]
+  let _initialized_workers: _StringSet = _initialized_workers.create()
+  var _new_state_routing_ids:
+    Map[WorkerName, Map[StateName, RoutingId] val] iso =
+    recover Map[WorkerName, Map[StateName, RoutingId] val] end
+  let _joining_worker_count: USize
+
+  new create(auth: AmbientAuth, autoscale: Autoscale ref,
+    rr: RouterRegistry ref, connected_joiners: Map[WorkerName, TCPConnection],
+    joining_worker_count: USize)
+  =>
+    _auth = auth
+    _autoscale = autoscale
+    _router_registry = rr
+    _connected_joiners = connected_joiners
+    _joining_worker_count = joining_worker_count
+    @printf[I32]("AUTOSCALE: Stop the world and injecting autoscale barrier\n"
+      .cstring())
+
+  fun name(): String => "_InjectAutoscaleBarrier"
+
+  fun ref grow_autoscale_barrier_complete() =>
+    for (worker, (conn, local_topology)) in _connected_joiners.values() do
+      _router_registry.inform_joining_worker(conn, worker, local_topology)
+    end
+    let new_state_routing_ids:
+      Map[WorkerName, Map[StateName, RoutingId] val] val =
+        (_new_state_routing_ids = recover Map[WorkerName, Map[StateName,
+          RoutingId] val] end)
+    _autoscale.wait_for_joiner_initialization(_joining_worker_count,
+      _initialized_workers, new_state_routing_ids, _current_worker_count)
 
   fun ref joining_worker_initialized(worker: WorkerName,
     state_routing_ids: Map[StateName, RoutingId] val)
