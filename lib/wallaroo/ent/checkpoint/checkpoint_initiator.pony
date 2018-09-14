@@ -81,7 +81,7 @@ actor CheckpointInitiator is Initializable
     | (let cid: CheckpointId, let rid: RollbackId) =>
       @printf[I32]("!@ CheckpointInitiator: initializing cid/rid to %s/%s\n".cstring(), cid.string().cstring(), rid.string().cstring())
       ifdef "resilience" then
-        _save_checkpoint_id(cid, rid)
+        _commit_checkpoint_id(cid, rid)
         @printf[I32]("!@ -- Writing cid %s to event log\n".cstring(), _current_checkpoint_id.string().cstring())
         _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
       end
@@ -94,7 +94,7 @@ actor CheckpointInitiator is Initializable
         ifdef "resilience" then
           _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
         end
-        _save_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
+        _commit_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
       end
     end
 
@@ -313,14 +313,19 @@ actor CheckpointInitiator is Initializable
     sender: WorkerName)
   =>
     if sender == _primary_worker then
-      _current_checkpoint_id = checkpoint_id
-      _last_complete_checkpoint_id = checkpoint_id
-      _last_rollback_id = rollback_id
-      _save_checkpoint_id(checkpoint_id, rollback_id)
+      _commit_checkpoint_id(checkpoint_id, rollback_id)
     else
       @printf[I32](("CommitCheckpointIdMsg received from worker that is " +
         "not the primary for checkpoints. Ignoring.\n").cstring())
     end
+
+  fun ref _commit_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
+  =>
+    _current_checkpoint_id = checkpoint_id
+    _last_complete_checkpoint_id = checkpoint_id
+    _last_rollback_id = rollback_id
+    _save_checkpoint_id(checkpoint_id, rollback_id)
 
   fun ref _save_checkpoint_id(checkpoint_id: CheckpointId,
     rollback_id: RollbackId)
