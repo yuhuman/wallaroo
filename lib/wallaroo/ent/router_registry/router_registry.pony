@@ -1631,6 +1631,8 @@ actor RouterRegistry
     for w in leaving_workers.values() do
       _barrier_initiator.remove_worker(w)
       _checkpoint_initiator.remove_worker(w)
+      //!@ ?? Do we need this ??
+      _unmute_request(w)
     end
     for (state_name, pr) in _partition_routers.pairs() do
       let new_pr = pr.recalculate_hash_partitions_for_shrink(leaving_workers)
