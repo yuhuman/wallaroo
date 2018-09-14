@@ -194,7 +194,7 @@ actor EventLog
     _backend.encode_checkpoint_id(checkpoint_id)
     _phase.checkpoint_id_written(checkpoint_id)
 
-  fun ref _update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
+  fun ref update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
   =>
     _phase = _NormalEventLogPhase(checkpoint_id, this)
 
