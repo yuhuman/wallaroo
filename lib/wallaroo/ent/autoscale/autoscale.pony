@@ -968,6 +968,7 @@ class _WaitingForLeavingMigration is _AutoscalePhase
     None
 
   fun ref all_key_migration_complete() =>
+    @printf[I32]("!@ AUTOSCALENOTES: Leaving worker all_key_migration_complete\n".cstring())
     _autoscale.wait_for_leaving_migration_acks(_remaining_workers)
 
 class _WaitingForLeavingMigrationAcks is _AutoscalePhase
