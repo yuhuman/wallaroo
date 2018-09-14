@@ -196,7 +196,8 @@ actor EventLog
 
   fun ref update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
   =>
-    _phase = _NormalEventLogPhase(checkpoint_id, this)
+    // We need to update the next checkpoint id we're expecting.
+    _phase = _NormalEventLogPhase(checkpoint_id + 1, this)
 
   fun ref checkpoint_complete(checkpoint_id: CheckpointId) =>
     // @printf[I32]("!@ EventLog: checkpoint_complete()\n".cstring())
