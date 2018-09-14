@@ -907,6 +907,7 @@ actor RouterRegistry
     _unmute_request(originating_worker)
 
   fun ref _unmute_request(originating_worker: WorkerName) =>
+    @printf[I32]("!@ RouterRegistry: _unmute_request from w\n".cstring(), originating_worker.cstring())
     if _stopped_worker_waiting_list.size() > 0 then
       _stopped_worker_waiting_list.unset(originating_worker)
       if (_stopped_worker_waiting_list.size() == 0) then
