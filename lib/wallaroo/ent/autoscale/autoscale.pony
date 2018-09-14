@@ -121,16 +121,15 @@ class Autoscale
     _phase.worker_join(conn, worker, worker_count, local_topology,
       current_worker_count)
 
-  fun ref inject_autoscale_barrier(connected_joiners: _StringSet,
-    joining_worker_count: USize)
+  fun ref inject_autoscale_barrier(
+    connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)],
+    joining_worker_count: USize, current_worker_count: USize)
   =>
-    _phase = _InjectAutoscaleBarrier(_auth, this, _router_registry,
-      connected_joiners, joining_worker_count)
+    _phase = _InjectAutoscaleBarrier(this, _router_registry,
+      connected_joiners, joining_worker_count, current_worker_count)
 
-  fun ref grow_autoscale_barrier_complete(conn: TCPConnection,
-    local_topology: LocalTopology)
-  =>
-    _phase.grow_autoscale_barrier_complete(conn, local_topology)
+  fun ref grow_autoscale_barrier_complete() =>
+    _phase.grow_autoscale_barrier_complete()
 
   fun ref wait_for_joiner_initialization(joining_worker_count: USize,
     initialized_workers: _StringSet,
@@ -308,9 +307,7 @@ trait _AutoscalePhase
     _invalid_call()
     Fail()
 
-  fun ref grow_autoscale_barrier_complete(conn: TCPConnection,
-    local_topology: LocalTopology)
-  =>
+  fun ref grow_autoscale_barrier_complete() =>
     _invalid_call()
     Fail()
 
@@ -438,8 +435,8 @@ class _WaitingForJoiners is _AutoscalePhase
     else
       _connected_joiners(worker) = (conn, local_topology)
       if _connected_joiners.size() == _joining_worker_count then
-        _autoscale.inject_autoscale_barrier(_auth, _connected_joiners,
-          _joining_worker_count)
+        _autoscale.inject_autoscale_barrier(_connected_joiners,
+          _joining_worker_count, _current_worker_count)
       end
     end
 
@@ -460,32 +457,34 @@ class _WaitingForJoiners is _AutoscalePhase
     end
 
 class _InjectAutoscaleBarrier is _AutoscalePhase
-  let _auth: AmbientAuth
   let _autoscale: Autoscale ref
   let _router_registry: RouterRegistry ref
-  let _connected_joiners: Map[WorkerName, TCPConnection]
+  let _connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)]
   let _initialized_workers: _StringSet = _initialized_workers.create()
   var _new_state_routing_ids:
     Map[WorkerName, Map[StateName, RoutingId] val] iso =
     recover Map[WorkerName, Map[StateName, RoutingId] val] end
   let _joining_worker_count: USize
+  let _current_worker_count: USize
 
-  new create(auth: AmbientAuth, autoscale: Autoscale ref,
-    rr: RouterRegistry ref, connected_joiners: Map[WorkerName, TCPConnection],
-    joining_worker_count: USize)
+  new create(autoscale: Autoscale ref, rr: RouterRegistry ref,
+    connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)],
+    joining_worker_count: USize, current_worker_count: USize)
   =>
-    _auth = auth
     _autoscale = autoscale
     _router_registry = rr
     _connected_joiners = connected_joiners
     _joining_worker_count = joining_worker_count
+    _current_worker_count = current_worker_count
     @printf[I32]("AUTOSCALE: Stop the world and injecting autoscale barrier\n"
       .cstring())
 
   fun name(): String => "_InjectAutoscaleBarrier"
 
   fun ref grow_autoscale_barrier_complete() =>
-    for (worker, (conn, local_topology)) in _connected_joiners.values() do
+    for (worker, data) in _connected_joiners.pairs() do
+      let conn = data._1
+      let local_topology = data._2
       _router_registry.inform_joining_worker(conn, worker, local_topology)
     end
     let new_state_routing_ids:

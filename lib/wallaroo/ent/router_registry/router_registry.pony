@@ -805,7 +805,7 @@ actor RouterRegistry
 
     let promise = Promise[None]
     promise.next[None]({(_: None) =>
-      _self.join_autoscale_barrier_complete(new_workers)})
+      _self.join_autoscale_barrier_complete()})
     _autoscale_initiator.initiate_autoscale(promise)
 
   fun ref stop_the_world_for_grow_migration(
@@ -960,7 +960,7 @@ actor RouterRegistry
 
   be join_autoscale_barrier_complete() =>
     try
-      (_autoscale as Autoscale).join_autoscale_barrier_complete()
+      (_autoscale as Autoscale).grow_autoscale_barrier_complete()
     else
       Fail()
     end
