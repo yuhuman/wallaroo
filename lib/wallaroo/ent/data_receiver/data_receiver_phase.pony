@@ -183,6 +183,7 @@ class _QueuingDataReceiverPhase is _DataReceiverPhase
   fun ref forward_barrier(input_id: RoutingId, output_id: RoutingId,
     token: BarrierToken, seq_id: SeqId)
   =>
+    @printf[I32]("!@ DataReceiver: Queuing barrier to %s\n".cstring(), output_id.string().cstring())
     _queued.push((input_id, output_id, token, seq_id))
 
   fun ref data_connect(highest_seq_id: SeqId) =>

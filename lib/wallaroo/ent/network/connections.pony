@@ -535,6 +535,7 @@ actor Connections is Cluster
     tidr_blueprints: Map[StateName, TargetIdRouterBlueprint] val,
     local_sinks: Map[RoutingId, Consumer] val,
     state_steps: Map[StateName, Array[Step] val] val,
+    state_step_ids: Map[StateName, Map[RoutingId, Step] val] val,
     router_registry: RouterRegistry, lti: LocalTopologyInitializer)
   =>
     // We delegate to router registry through here to ensure that we've
@@ -545,7 +546,7 @@ actor Connections is Cluster
     router_registry.create_target_id_routers_from_blueprint(tidr_blueprints,
       state_steps, local_sinks, lti)
     router_registry.create_partition_routers_from_blueprints(workers,
-      state_steps, pr_blueprints)
+      state_steps, state_step_ids, pr_blueprints)
     router_registry.create_stateless_partition_routers_from_blueprints(
       spr_blueprints)
 

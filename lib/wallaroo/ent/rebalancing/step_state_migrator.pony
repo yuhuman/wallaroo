@@ -32,13 +32,13 @@ primitive StepStateMigrator
       Fail()
     end
 
-  fun send_state(runner: Runner, id: RoutingId, boundary: OutgoingBoundary,
-    state_name: String, key: Key, checkpoint_id: CheckpointId,
-    auth: AmbientAuth)
+  fun send_state(step: Step ref, runner: Runner, id: RoutingId,
+    boundary: OutgoingBoundary, state_name: String, key: Key,
+    checkpoint_id: CheckpointId, auth: AmbientAuth)
   =>
     match runner
     | let r: SerializableStateRunner =>
-      let state_bytes = r.export_key_state(key)
+      let state_bytes = r.export_key_state(step, key)
       @printf[I32]("!@ READY TO EXPORT %s bytes for key %s\n".cstring(), state_bytes.size().string().cstring(), key.cstring())
       boundary.migrate_key(id, state_name, key, checkpoint_id,
         state_bytes)

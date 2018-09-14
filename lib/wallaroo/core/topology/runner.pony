@@ -54,7 +54,7 @@ interface Runner
 interface SerializableStateRunner
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
-  fun ref export_key_state(key: Key): ByteSeq val
+  fun ref export_key_state(step: Step ref, key: Key): ByteSeq val
   fun ref serialize_state(): ByteSeq val
   fun ref replace_serialized_state(s: ByteSeq val)
 
@@ -586,7 +586,6 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
     metrics_reporter: MetricsReporter ref): (Bool, U64)
   =>
-    @printf[I32]("!@ StateRunner run: STATE MIGHT CHANGE\n".cstring())
     match data
     | let sp: StateProcessor[S] =>
       let key = sp.key()
@@ -705,7 +704,8 @@ class StateRunner[S: State ref] is (Runner & RollbackableRunner &
       step.register_key(s_name, key)
     end
 
-  fun ref export_key_state(key: Key): ByteSeq val =>
+  fun ref export_key_state(step: Step ref, key: Key): ByteSeq val =>
+    step.unregister_key(_state_name, key)
     try
       @printf[I32]("!@ exporting key %s\n".cstring(), key.cstring())
       let state =

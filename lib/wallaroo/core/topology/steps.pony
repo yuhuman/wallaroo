@@ -445,13 +445,13 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     _routes.contains(c)
 
   be register_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Registered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     _inputs(id) = producer
     _upstreams.set(producer)
 
   be unregister_producer(id: RoutingId, producer: Producer) =>
-    @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
+    // @printf[I32]("!@ Unregistered producer %s at step %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _id.string().cstring(), _upstreams.size().string().cstring())
 
     if _inputs.contains(id) then
       try
@@ -499,6 +499,7 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     end
 
   be dispose() =>
+    @printf[I32]("Disposing Step %s\n".cstring(), _id.string().cstring())
     _event_log.unregister_resilient(_id, this)
     _unregister_all_outputs()
 
@@ -518,21 +519,20 @@ actor Step is (Producer & Consumer & BarrierProcessor)
     checkpoint_id: CheckpointId)
   =>
     ifdef "autoscale" then
-      //@!
-      // _unregister_all_outputs()
       match _step_message_processor
       | let nmp: NormalStepMessageProcessor =>
-        StepStateMigrator.send_state(_runner, _id, boundary, state_name,
+        StepStateMigrator.send_state(this, _runner, _id, boundary, state_name,
           key, checkpoint_id, _auth)
       else
         Fail()
       end
-      dispose()
     end
 
   fun ref register_key(state_name: StateName, key: Key) =>
-    @printf[I32]("!@ Step: Registering key %s with RouterRegistry\n".cstring(), key.cstring())
     _router_registry.register_key(state_name, key)
+
+  fun ref unregister_key(state_name: StateName, key: Key) =>
+    _router_registry.unregister_key(state_name, key)
 
   //////////////
   // BARRIER
@@ -540,7 +540,7 @@ actor Step is (Producer & Consumer & BarrierProcessor)
   be receive_barrier(step_id: RoutingId, producer: Producer,
     barrier_token: BarrierToken)
   =>
-    @printf[I32]("!@ Step %s received barrier %s from %s\n".cstring(), _id.string().cstring(), barrier_token.string().cstring(), step_id.string().cstring())
+    // @printf[I32]("!@ Step %s received barrier %s from %s\n".cstring(), _id.string().cstring(), barrier_token.string().cstring(), step_id.string().cstring())
     process_barrier(step_id, producer, barrier_token)
 
   fun ref process_barrier(step_id: RoutingId, producer: Producer,

@@ -104,6 +104,7 @@ class val LocalTopology
     initializables: Initializables,
     data_routes: Map[RoutingId, Consumer tag],
     state_steps: Map[StateName, Array[Step] val],
+    built_state_step_ids: Map[StateName, Map[RoutingId, Step] val],
     router_registry: RouterRegistry) ?
   =>
     let subpartition =
@@ -123,8 +124,8 @@ class val LocalTopology
         state_map(state_name) = subpartition.build(_app_name, _worker_name,
           worker_names, metrics_conn, auth, event_log, all_local_keys,
           recovery_replayer, outgoing_boundaries, initializables, data_routes,
-          state_step_ids, state_steps, state_routing_ids(state_name)?,
-          router_registry)
+          state_step_ids, state_steps, built_state_step_ids,
+          state_routing_ids(state_name)?, router_registry)
       else
         Fail()
       end
@@ -419,7 +420,6 @@ actor LocalTopologyInitializer is LayoutInitializer
     | let t: LocalTopology =>
       if not ArrayHelpers[String].contains[String](t.worker_names, w) then
         let updated_topology = _add_worker_name(w, t)
-        @printf[I32]("!@ Added worker %s to LocalTopology\n".cstring(), w.cstring())
         _connections.create_control_connection(w, joining_host,
           control_addr._2)
         let new_boundary_id = _routing_id_gen()
@@ -943,6 +943,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         let built_stateless_steps = recover trn Map[RoutingId, Consumer] end
 
         let built_state_steps = Map[String, Array[Step] val]
+        let built_state_step_ids = Map[String, Map[RoutingId, Step] val]
 
         // Keep track of routes we can actually use for messages arriving at
         // state steps (this depends on the state steps' upstreams across
@@ -1066,7 +1067,8 @@ actor LocalTopologyInitializer is LayoutInitializer
                       _metrics_conn, _event_log, local_keys,
                       _recovery_replayer, _auth,
                       _outgoing_boundaries, _initializables,
-                      data_routes_ref, built_state_steps, _router_registry)?
+                      data_routes_ref, built_state_steps,
+                      built_state_step_ids, _router_registry)?
                   else
                     @printf[I32]("Failed to update state_map\n".cstring())
                     error
@@ -1445,7 +1447,8 @@ actor LocalTopologyInitializer is LayoutInitializer
                     _metrics_conn, _event_log, local_keys,
                     _recovery_replayer, _auth,
                     _outgoing_boundaries, _initializables,
-                    data_routes_ref, built_state_steps, _router_registry)?
+                    data_routes_ref, built_state_steps,
+                    built_state_step_ids, _router_registry)?
                 else
                   @printf[I32]("Failed to update state map\n".cstring())
                   error
@@ -1515,9 +1518,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                 let b_source = BarrierSource(t.barrier_source_id,
                   _router_registry, _event_log)
                 _barrier_initiator.register_barrier_source(b_source)
-                // @printf[I32]("!@!! register_resilient: BarrierSource %s\n".cstring(), t.barrier_source_id.string().cstring())
-                //!@
-                // _event_log.register_resilient(t.barrier_source_id, b_source)
                 barrier_source = b_source
               end
               try
@@ -1596,7 +1596,8 @@ actor LocalTopologyInitializer is LayoutInitializer
                   _metrics_conn, _event_log, local_keys,
                   _recovery_replayer, _auth,
                   _outgoing_boundaries, _initializables,
-                  data_routes_ref, built_state_steps, _router_registry)?
+                  data_routes_ref, built_state_steps,
+                  built_state_step_ids, _router_registry)?
               else
                 @printf[I32]("Failed to update state map\n".cstring())
                 error
@@ -1794,6 +1795,7 @@ actor LocalTopologyInitializer is LayoutInitializer
       let data_routes_ref = Map[RoutingId, Consumer]
       let state_map = Map[StateName, Router]
       let built_state_steps = Map[String, Array[Step] val]
+      let built_state_step_ids = Map[String, Map[RoutingId, Step] val]
       let built_stateless_steps = recover trn Map[RoutingId, Consumer] end
       let local_keys = recover val Map[StateName, SetIs[Key] val] end
 
@@ -1860,14 +1862,14 @@ actor LocalTopologyInitializer is LayoutInitializer
         end
 
         // Create State Steps
-        @printf[I32]("!@ ><><>< state_builders size %s\n".cstring(), t.state_builders().size().string().cstring())
         for state_name in t.state_builders().keys() do
           try
             t.update_state_map(state_name, state_map,
               _metrics_conn, _event_log, local_keys,
               _recovery_replayer, _auth,
               _outgoing_boundaries, _initializables,
-              data_routes_ref, built_state_steps, _router_registry)?
+              data_routes_ref, built_state_steps,
+              built_state_step_ids, _router_registry)?
           else
             @printf[I32]("Failed to update state_map\n".cstring())
             error
@@ -1891,11 +1893,14 @@ actor LocalTopologyInitializer is LayoutInitializer
 
         let sendable_state_steps = consume val state_steps_iso
 
-        @printf[I32]("!@ SENDABLE_STATE_STEPS: size %s\n".cstring(), sendable_state_steps.size().string().cstring())
-        //!@
-        for (k, v) in sendable_state_steps.pairs() do
-          @printf[I32]("!@ -- k: %s, size: %s\n".cstring(), k.cstring(), v.size().string().cstring())
+        let state_step_ids_iso =
+          recover iso Map[StateName, Map[RoutingId, Step] val] end
+
+        for (k, v) in built_state_step_ids.pairs() do
+          state_step_ids_iso(k) = v
         end
+
+        let sendable_state_step_ids = consume val state_step_ids_iso
 
         for (id, s) in built_stateless_steps.pairs() do
           match s
@@ -1943,7 +1948,8 @@ actor LocalTopologyInitializer is LayoutInitializer
           _partition_router_blueprints,
           _stateless_partition_router_blueprints,
           consume target_id_router_blueprints, consume local_sinks,
-          sendable_state_steps, _router_registry, this)
+          sendable_state_steps, sendable_state_step_ids, _router_registry,
+          this)
 
         _save_local_topology()
         _save_worker_names()

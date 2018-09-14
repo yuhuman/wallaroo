@@ -224,10 +224,8 @@ actor RouterRegistry
 
   be set_partition_router(state_name: StateName, pr: PartitionRouter) =>
     _partition_routers(state_name) = pr
-    try
-      _local_keys.insert_if_absent(state_name, SetIs[Key])?
-    else
-      Unreachable()
+    if not _local_keys.contains(state_name) then
+      _local_keys(state_name) = SetIs[Key]
     end
 
   be set_stateless_partition_router(partition_id: U128,
@@ -491,9 +489,10 @@ actor RouterRegistry
   fun ref _register_key(state_name: StateName, key: Key,
     checkpoint_id: (CheckpointId | None) = None)
   =>
-    @printf[I32]("!@ RouterRegistry: register_key, key: %s\n".cstring(), key.cstring())
     try
-      _local_keys.insert_if_absent(state_name, SetIs[Key])?
+      if not _local_keys.contains(state_name) then
+        _local_keys(state_name) = SetIs[Key]
+      end
       _local_keys(state_name)?.set(key)
       (_local_topology_initializer as LocalTopologyInitializer)
         .register_key(state_name, key, checkpoint_id)
@@ -509,8 +508,9 @@ actor RouterRegistry
   fun ref _unregister_key(state_name: StateName, key: Key,
     checkpoint_id: (CheckpointId | None) = None)
   =>
-    @printf[I32]("!@ RouterRegistry: unregister_key, key: %s\n".cstring(), key.cstring())
     try
+      _local_keys.insert_if_absent(state_name, SetIs[Key])?
+      _local_keys(state_name)?.unset(key)
       (_local_topology_initializer as LocalTopologyInitializer)
         .unregister_key(state_name, key, checkpoint_id)
     else
@@ -672,6 +672,7 @@ actor RouterRegistry
 
   be create_partition_routers_from_blueprints(workers: Array[WorkerName] val,
     state_steps: Map[StateName, Array[Step] val] val,
+    state_step_ids: Map[StateName, Map[RoutingId, Step] val] val,
     partition_blueprints: Map[StateName, PartitionRouterBlueprint] val)
   =>
     let obs_trn = recover trn Map[WorkerName, OutgoingBoundary] end
@@ -679,14 +680,18 @@ actor RouterRegistry
       obs_trn(w) = ob
     end
     let obs = consume val obs_trn
-    for (s, b) in partition_blueprints.pairs() do
+    for (state_name, b) in partition_blueprints.pairs() do
       try
-        let local_state_steps = state_steps(s)?
+        let local_state_steps = state_steps(state_name)?
+        let local_state_step_ids = state_step_ids(state_name)?
         let next_router = b.build_router(_worker_name, workers,
-          local_state_steps, obs, _auth)
+          local_state_steps, local_state_step_ids, obs, _auth)
         _distribute_partition_router(next_router)
-        _partition_routers(s) = next_router
-        _local_keys.insert_if_absent(s, SetIs[Key])?
+        _partition_routers(state_name) = next_router
+
+        if not _local_keys.contains(state_name) then
+          _local_keys(state_name) = SetIs[Key]
+        end
       else
         Fail()
       end
@@ -934,7 +939,9 @@ actor RouterRegistry
       end
       new_keys(state_name) = ks
     end
+
     _local_keys = new_keys
+
     promise(None)
 
   /////////////////////////////////////////////////////////////////////////////
@@ -1183,7 +1190,6 @@ actor RouterRegistry
     """
     Step with provided step id has been created on another worker.
     """
-    @printf[I32]("!@ RouterRegistry: key_migration_complete for key %s with %s in there\n".cstring(), key.cstring(), _key_waiting_list.size().string().cstring())
     if _key_waiting_list.size() > 0 then
       _key_waiting_list.unset(key)
       if (_key_waiting_list.size() == 0) then

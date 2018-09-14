@@ -115,6 +115,7 @@ class BarrierStepForwarder
         match o
         | let ob: OutgoingBoundary =>
           // @printf[I32]("!@ FORWARDING TO BOUNDARY\n".cstring())
+          @printf[I32]("!@ BarrierStepForwarder: sending over OutgoingBoundary to %s\n".cstring(), o_id.string().cstring())
           ob.forward_barrier(o_id, _step_id,
             _barrier_token)
         else

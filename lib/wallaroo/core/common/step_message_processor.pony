@@ -130,7 +130,6 @@ class BarrierStepMessageProcessor is StepMessageProcessor
     barrier_token: BarrierToken)
   =>
     if _barrier_forwarder.input_blocking(input_id) then
-      @printf[I32]("!@ StepMessageProcessor: Queuing barrier %s!\n".cstring(), barrier_token.string().cstring())
       _queued.push(QueuedBarrier(input_id, producer, barrier_token))
     else
       _barrier_forwarder.receive_barrier(input_id, producer, barrier_token)

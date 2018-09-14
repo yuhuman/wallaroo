@@ -169,8 +169,9 @@ trait val StateSubpartitions is Equatable[StateSubpartitions]
     outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
     initializables: Initializables,
     data_routes: Map[RoutingId, Consumer],
-    state_step_ids: Map[StateName, Array[RoutingId] val] val,
+    state_step_assigned_ids: Map[StateName, Array[RoutingId] val] val,
     state_steps: Map[StateName, Array[Step] val],
+    state_step_ids: Map[StateName, Map[RoutingId, Step] val],
     state_routing_ids: Map[WorkerName, RoutingId] val,
     router_registery: RouterRegistry): PartitionRouter
   fun update_key(key: Key, pa: ProxyAddress): StateSubpartitions ?
@@ -213,8 +214,9 @@ class val KeyedStateSubpartitions[S: State ref] is
     outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
     initializables: Initializables,
     data_routes: Map[RoutingId, Consumer],
-    state_step_ids: Map[StateName, Array[RoutingId] val] val,
+    state_step_assigned_ids: Map[StateName, Array[RoutingId] val] val,
     state_steps: Map[StateName, Array[Step] val],
+    state_step_ids: Map[StateName, Map[RoutingId, Step] val],
     state_routing_ids: Map[WorkerName, RoutingId] val,
     router_registry: RouterRegistry): LocalPartitionRouter[S]
   =>
@@ -229,7 +231,7 @@ class val KeyedStateSubpartitions[S: State ref] is
         else
           SetIs[Key]
         end
-      let step_ids = state_step_ids(_state_name)?
+      let step_ids = state_step_assigned_ids(_state_name)?
 
       ifdef debug then
         Invariant(_per_worker_parallelism == step_ids.size())
@@ -269,10 +271,12 @@ class val KeyedStateSubpartitions[S: State ref] is
     end
 
     let new_state_steps_val = consume val new_state_steps
+    let new_state_step_ids_val = consume val new_state_step_ids
     state_steps(_state_name) = new_state_steps_val
+    state_step_ids(_state_name) = new_state_step_ids_val
 
     LocalPartitionRouter[S](_state_name, worker_name,
-      new_state_steps_val, consume new_state_step_ids,
+      new_state_steps_val, new_state_step_ids_val,
       consume hashed_node_routes, _key_distribution.hash_partitions(),
       state_routing_ids)
 
@@ -353,217 +357,3 @@ primitive _Contains
     else
       false
     end
-
-
-
-//!@
-// class LocalStatePartitions
-//   let _info: Map[StateName, Map[Key, Step]]
-
-//   new create() =>
-//     _info = _info.create()
-
-//   fun apply(state_name: StateName, key: box->Key!): this->Step ? =>
-//     _info(state_name)?(key)?
-
-//   fun size(): USize =>
-//     _info.size()
-
-//   fun ref add_state(state_name: StateName) =>
-//     if not _info.contains(state_name) then
-//       _info(state_name) = Map[Key, Step]
-//     end
-
-//   fun ref add(state_name: StateName, key: Key, step: Step) =>
-//     try
-//       _info.insert_if_absent(state_name, Map[Key, Step])?(key) = step
-//     else
-//       Unreachable()
-//     end
-
-//   fun ref remove_key(state_name: StateName, key: Key): Step ? =>
-//     _info(state_name)?.remove(key)?._2
-
-//   fun contains(state_name: StateName, key: Key): Bool =>
-//     _Contains[Step](_info, state_name, key)
-
-//   fun is_empty(): Bool =>
-//     _info.size() == 0
-
-//   fun ref key_diff(new_keys: Map[StateName, Map[Key, RoutingId] val] val):
-//     (Map[StateName, Map[Key, RoutingId]], Map[StateName, SetIs[Key]])
-//   =>
-//     """
-//     Check new keys to see which keys we're missing and which keys we have
-//     that need to be removed. Return a tuple with keys to add as first element
-//     and keys to remove as second.
-//     """
-//     let keys_to_add = Map[StateName, Map[Key, RoutingId]]
-//     let keys_to_remove = Map[StateName, SetIs[Key]]
-//     try
-//       for (state, keys) in new_keys.pairs() do
-//         keys_to_add(state) = Map[Key, RoutingId]
-//         keys_to_remove(state) = SetIs[Key]
-//         if not _info.contains(state) then
-//           _info(state) = Map[Key, Step]
-//         end
-//         let next = _info(state)?
-//         for (k, r_id) in keys.pairs() do
-//           if not next.contains(k) then
-//             keys_to_add(state)?(k) = r_id
-//           end
-//         end
-//         for k in next.keys() do
-//           if not new_keys(state)?.contains(k) then
-//             keys_to_remove(state)?.set(k)
-//           end
-//         end
-//       end
-//     else
-//       Fail()
-//     end
-//     (keys_to_add, keys_to_remove)
-
-//   fun register_producer(state_name: StateName, input_id: RoutingId,
-//     producer: Producer)
-//   =>
-//     try
-//       for step in _info(state_name)?.values() do
-//         step.register_producer(input_id, producer)
-//       end
-//     else
-//       // @printf[I32]("!@ LocalStatePartitions: Can't find %s\n".cstring(), state_name.cstring())
-//       None
-//     end
-
-//   fun unregister_producer(state_name: StateName, input_id: RoutingId,
-//     producer: Producer)
-//   =>
-//     try
-//       for step in _info(state_name)?.values() do
-//         step.unregister_producer(input_id, producer)
-//       end
-//     end
-
-//   fun receive_barrier(state_name: StateName, origin_step_id: RoutingId,
-//     producer: Producer, barrier_token: BarrierToken)
-//   =>
-//     try
-//       for step in _info(state_name)?.values() do
-//         step.receive_barrier(origin_step_id, producer, barrier_token)
-//       end
-//     else
-//       None
-//       //!@
-//       // Fail()
-//     end
-
-//   fun clone(): LocalStatePartitions iso^ =>
-//     let c = recover iso LocalStatePartitions.create() end
-
-//     for (sn, k_i) in _info.pairs() do
-//       for (key, info) in k_i.pairs() do
-//         c.add(sn, key, info)
-//       end
-//     end
-
-//     c
-
-//   fun triples(): Iter[(StateName, Key, Step)] =>
-//     """
-//     Return an iterator over tuples where the first two values are the state name
-//     and the key, and the last value is the info value.
-//     """
-//     Iter[(StateName, Map[Key, Step] box)](_info.pairs()).
-//       flat_map[(StateName, (Key, Step))](
-//         { (k_m) => Iter[StateName].repeat_value(k_m._1)
-//           .zip[(Key, Step)](k_m._2.pairs()) }).
-//       map[(StateName, Key, Step)](
-//         { (x) => (x._1, x._2._1, x._2._2) })
-
-// class LocalStatePartitionIds
-//   let _info: Map[String, Map[Key, RoutingId]]
-
-//   new create() =>
-//     _info = _info.create()
-
-//   fun apply(state_name: String, key: box->Key!): this->RoutingId ? =>
-//     _info(state_name)?(key)?
-
-//   fun ref add(state_name: String, key: Key, info: RoutingId^) =>
-//     try
-//       _info.insert_if_absent(state_name, Map[Key, RoutingId])?(key) = info
-//     else
-//       Unreachable()
-//     end
-
-//   fun ref remove_key(state_name: StateName, key: Key): RoutingId ? =>
-//     _info(state_name)?.remove(key)?._2
-
-//   fun contains(state_name: String, key: Key): Bool =>
-//     _Contains[RoutingId](_info, state_name, key)
-
-//   fun clone(): LocalStatePartitionIds iso^ =>
-//     let c = recover iso LocalStatePartitionIds.create() end
-
-//     for (sn, k_i) in _info.pairs() do
-//       for (key, info) in k_i.pairs() do
-//         c.add(sn, key, info)
-//       end
-//     end
-
-//     c
-
-//   fun triples(): Iter[(String, String, RoutingId)] =>
-//     """
-//     Return an iterator over tuples where the first two values are the state name
-//     and the key, and the last value is the info value.
-//     """
-//     Iter[(String, Map[String, RoutingId] box)](_info.pairs()).
-//       flat_map[(String, (String, RoutingId))](
-//         { (k_m) => Iter[String].repeat_value(k_m._1)
-//           .zip[(String, RoutingId)](k_m._2.pairs()) }).
-//       map[(String, String, RoutingId)](
-//         { (x) => (x._1, x._2._1, x._2._2) })
-
-// class StatePartitionRouteIds
-//   let _info: Map[String, Map[Key, RouteId]]
-
-//   new create() =>
-//     _info = _info.create()
-
-//   fun apply(state_name: String, key: box->Key!): this->RouteId ? =>
-//     _info(state_name)?(key)?
-
-//   fun ref add(state_name: String, key: Key, info: RouteId^) =>
-//     try
-//       _info.insert_if_absent(state_name, Map[Key, RouteId])?(key) = info
-//     else
-//       Unreachable()
-//     end
-
-//   fun contains(state_name: String, key: Key): Bool =>
-//     _Contains[RouteId](_info, state_name, key)
-
-//   fun clone(): StatePartitionRouteIds iso^ =>
-//     let c = recover iso StatePartitionRouteIds.create() end
-
-//     for (sn, k_i) in _info.pairs() do
-//       for (key, info) in k_i.pairs() do
-//         c.add(sn, key, info)
-//       end
-//     end
-
-//     c
-
-//   fun triples(): Iter[(String, String, RouteId)] =>
-//     """
-//     Return an iterator over tuples where the first two values are the state name
-//     and the key, and the last value is the info value.
-//     """
-//     Iter[(String, Map[String, RouteId] box)](_info.pairs()).
-//       flat_map[(String, (String, RouteId))](
-//         { (k_m) => Iter[String].repeat_value(k_m._1)
-//           .zip[(String, RouteId)](k_m._2.pairs()) }).
-//       map[(String, String, RouteId)](
-//         { (x) => (x._1, x._2._1, x._2._2) })

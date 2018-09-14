@@ -147,24 +147,6 @@ actor Startup
           _startup_options.log_rotation.string() + "|||\n").cstring())
       end
 
-      //!@
-      // if not _is_joining then
-      //   match _startup_options.worker_count
-      //   | let wc: USize =>
-      //     if wc == 1 then
-      //       @printf[I32]("Single worker topology\n".cstring())
-      //       _is_multi_worker = false
-      //     else
-      //       @printf[I32]((_startup_options.worker_count.string() +
-      //         " worker topology\n").cstring())
-      //     end
-      //   else
-      //     if _startup_options.is_initializer then
-      //       Unreachable()
-      //     end
-      //   end
-      // end
-
       if _is_joining then
         if _startup_options.worker_name == "" then
           @printf[I32](("You must specify a name for the worker " +
@@ -473,7 +455,8 @@ actor Startup
       let new_state_routing_ids_iso = recover iso Map[StateName, RoutingId] end
       let routing_id_gen = RoutingIdGenerator
       for state_name in m.partition_router_blueprints.keys() do
-        new_state_routing_ids_iso(state_name) = routing_id_gen()
+        let next_id = routing_id_gen()
+        new_state_routing_ids_iso(state_name) = next_id
       end
       let new_state_routing_ids = consume val new_state_routing_ids_iso
 

@@ -416,18 +416,6 @@ actor OutgoingBoundary is Consumer
     try
       var cur_id = _lowest_queue_id
       for msg in _queue.values() do
-        //!@
-        // match ChannelMsgDecoder(consume next, _auth)
-        // | let r: ReplayMsg =>
-          // try
-            // match r.msg(_auth)?
-            // | let fbm: ForwardBarrierMsg =>
-              // @printf[I32]("!@ Boundary %s: ForwardBarrierMsg %s\n".cstring(), _step_id.string().cstring(), fbm.token.string().cstring())
-            // end
-          // end
-        // end
-
-        // @printf[I32]("!@ Boundary %s: replaying message!\n".cstring(), _step_id.string().cstring())
         if cur_id >= idx then
           _writev(ChannelMsgEncoder.replay(msg, _auth)?)
         end
