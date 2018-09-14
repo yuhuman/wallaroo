@@ -92,6 +92,9 @@ class _NormalEventLogPhase is _EventLogPhase
     // @printf[I32]("!@ _NormalEventLogPhase: checkpoint_state() for checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
 
     ifdef debug then
+      if checkpoint_id != _next_checkpoint_id then
+        @printf[I32]("!@ EventLogPhase: checkpoint_state(): rcvd: %s, expected: %s\n".cstring(), checkpoint_id.string().cstring(), _next_checkpoint_id.string().cstring())
+      end
       Invariant(checkpoint_id == _next_checkpoint_id)
     end
     ifdef "trace" then
