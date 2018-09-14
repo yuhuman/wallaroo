@@ -1404,8 +1404,8 @@ actor RouterRegistry
     end
 
   be remote_stop_the_world_for_shrink_migration_request(
-    coordinator: WorkerName, leaving_workers: Array[WorkerName] val,
-    remaining_workers: Array[WorkerName] val)
+    coordinator: WorkerName, remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
   =>
     """
     !@
