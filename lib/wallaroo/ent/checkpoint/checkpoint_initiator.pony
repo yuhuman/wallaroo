@@ -79,8 +79,10 @@ actor CheckpointInitiator is Initializable
     """
     match ids
     | (let cid: CheckpointId, let rid: RollbackId) =>
+      @printf[I32]("!@ CheckpointInitiator: initializing cid/rid to %s/%s\n".cstring(), cid.string().cstring(), rid.string().cstring())
       ifdef "resilience" then
         _save_checkpoint_id(cid, rid)
+        @printf[I32]("!@ -- Writing cid %s to event log\n".cstring(), _current_checkpoint_id.string().cstring())
         _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
       end
     else
