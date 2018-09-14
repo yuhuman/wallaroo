@@ -30,19 +30,21 @@ class Autoscale
 
     JOIN (coordinator):
     1) _WaitingForJoiners: Waiting for provided number of workers to connect
-    2) _InjectAutoscaleBarrier: Stop the world and inject barrier to ensure in
+    2) _WaitingForCheckpointId: Get checkpoint id to inform new
+       workers.
+    3) _InjectAutoscaleBarrier: Stop the world and inject barrier to ensure in
        flight messages are finished
-    3) _WaitingForJoinerInitialization: Waiting for all joiners to initialize
-    4) _WaitingForConnections: Waiting for current workers to connect to
+    4) _WaitingForJoinerInitialization: Waiting for all joiners to initialize
+    5) _WaitingForConnections: Waiting for current workers to connect to
       joiners
-    5) _WaitingForJoinMigration: We currently delegate coordination of
+    6) _WaitingForJoinMigration: We currently delegate coordination of
       migration back to RouterRegistry. We wait for join
       migration to finish from our side (i.e. we've sent all steps).
       TODO: Handle these remaining phases here.
-    6) _WaitingForJoinMigrationAcks: We wait for new workers to ack incoming
+    7) _WaitingForJoinMigrationAcks: We wait for new workers to ack incoming
       join migration.
-    7) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
-    8) _WaitingForAutoscale: Autoscale is complete and we are back to our
+    8) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
+    9) _WaitingForAutoscale: Autoscale is complete and we are back to our
       initial waiting state.
 
     JOIN (non-coordinator):
@@ -119,16 +121,31 @@ class Autoscale
     _phase.worker_join(conn, worker, worker_count, local_topology,
       current_worker_count)
 
-  fun ref inject_autoscale_barrier(
+  fun ref request_checkpoint_id(
     connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)],
     joining_worker_count: USize, current_worker_count: USize)
+  =>
+    _phase = _WaitingForCheckpointId(this, _router_registry, connected_joiners,
+      joining_worker_count, current_worker_count)
+    _router_registry.request_checkpoint_id_for_autoscale()
+
+  fun ref update_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
+  =>
+    _phase.update_checkpoint_id(checkpoint_id, rollback_id)
+
+  fun ref inject_autoscale_barrier(
+    connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)],
+    joining_worker_count: USize, current_worker_count: USize,
+    checkpoint_id: CheckpointId, rollback_id: RollbackId)
   =>
     let new_workers = recover iso Array[WorkerName] end
     for w in connected_joiners.keys() do
       new_workers.push(w)
     end
     _phase = _InjectAutoscaleBarrier(this, _router_registry,
-      connected_joiners, joining_worker_count, current_worker_count)
+      connected_joiners, joining_worker_count, current_worker_count,
+      checkpoint_id, rollback_id)
     _router_registry.initiate_stop_the_world_for_grow_migration(
       consume new_workers)
 
@@ -312,6 +329,12 @@ trait _AutoscalePhase
     _invalid_call()
     Fail()
 
+  fun ref update_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
+  =>
+    _invalid_call()
+    Fail()
+
   fun ref grow_autoscale_barrier_complete() =>
     _invalid_call()
     Fail()
@@ -447,35 +470,15 @@ class _WaitingForJoiners is _AutoscalePhase
     else
       _connected_joiners(worker) = (conn, local_topology)
       if _connected_joiners.size() == _joining_worker_count then
-        _autoscale.inject_autoscale_barrier(_connected_joiners,
+        _autoscale.request_checkpoint_id(_connected_joiners,
           _joining_worker_count, _current_worker_count)
       end
     end
 
-  fun ref joining_worker_initialized(worker: WorkerName,
-    state_routing_ids: Map[StateName, RoutingId] val)
-  =>
-    //!@ I'd rather this not be possible
-    Fail()
-
-    // It's possible some workers will be initialized when we're still in
-    // this phase. We need to keep track of this to hand off that info to
-    // the next phase.
-    _initialized_workers.set(worker)
-    _new_state_routing_ids(worker) = state_routing_ids
-    if _initialized_workers.size() >= _joining_worker_count then
-      // We should have already transitioned to the next phase before this.
-      Fail()
-    end
-
-class _InjectAutoscaleBarrier is _AutoscalePhase
+class _WaitingForCheckpointId is _AutoscalePhase
   let _autoscale: Autoscale ref
   let _router_registry: RouterRegistry ref
   let _connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)]
-  let _initialized_workers: _StringSet = _initialized_workers.create()
-  var _new_state_routing_ids:
-    Map[WorkerName, Map[StateName, RoutingId] val] iso =
-    recover Map[WorkerName, Map[StateName, RoutingId] val] end
   let _joining_worker_count: USize
   let _current_worker_count: USize
 
@@ -488,6 +491,42 @@ class _InjectAutoscaleBarrier is _AutoscalePhase
     _connected_joiners = connected_joiners
     _joining_worker_count = joining_worker_count
     _current_worker_count = current_worker_count
+    @printf[I32](("AUTOSCALE: Waiting for next checkpoint id\n").cstring())
+
+  fun name(): String => "_WaitingForCheckpointId"
+
+  fun ref update_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
+  =>
+    _autoscale.inject_autoscale_barrier(_connected_joiners,
+      _joining_worker_count, _current_worker_count, checkpoint_id,
+      rollback_id)
+
+class _InjectAutoscaleBarrier is _AutoscalePhase
+  let _autoscale: Autoscale ref
+  let _router_registry: RouterRegistry ref
+  let _connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)]
+  let _initialized_workers: _StringSet = _initialized_workers.create()
+  var _new_state_routing_ids:
+    Map[WorkerName, Map[StateName, RoutingId] val] iso =
+    recover Map[WorkerName, Map[StateName, RoutingId] val] end
+  let _joining_worker_count: USize
+  let _current_worker_count: USize
+  let _checkpoint_id: CheckpointId
+  let _rollback_id: RollbackId
+
+  new create(autoscale: Autoscale ref, rr: RouterRegistry ref,
+    connected_joiners: Map[WorkerName, (TCPConnection, LocalTopology)],
+    joining_worker_count: USize, current_worker_count: USize,
+    checkpoint_id: CheckpointId, rollback_id: RollbackId)
+  =>
+    _autoscale = autoscale
+    _router_registry = rr
+    _connected_joiners = connected_joiners
+    _joining_worker_count = joining_worker_count
+    _current_worker_count = current_worker_count
+    _checkpoint_id = checkpoint_id
+    _rollback_id = rollback_id
     @printf[I32](("AUTOSCALE: Stopping the world and injecting autoscale " +
       "barrier\n").cstring())
 
@@ -497,7 +536,8 @@ class _InjectAutoscaleBarrier is _AutoscalePhase
     for (worker, data) in _connected_joiners.pairs() do
       let conn = data._1
       let local_topology = data._2
-      _router_registry.inform_joining_worker(conn, worker, local_topology)
+      _router_registry.inform_joining_worker(conn, worker, local_topology,
+        _checkpoint_id, _rollback_id)
     end
     let new_state_routing_ids:
       Map[WorkerName, Map[StateName, RoutingId] val] val =

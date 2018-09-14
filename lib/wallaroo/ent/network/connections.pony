@@ -685,7 +685,8 @@ actor Connections is Cluster
     end
 
   be inform_joining_worker(conn: TCPConnection, worker: String,
-    local_topology: LocalTopology, primary_checkpoint_worker: String,
+    local_topology: LocalTopology, checkpoint_id: CheckpointId,
+    rollback_id: RollbackId, primary_checkpoint_worker: String,
     partition_blueprints: Map[String, PartitionRouterBlueprint] val,
     stateless_partition_blueprints:
       Map[U128, StatelessPartitionRouterBlueprint] val,
@@ -707,8 +708,9 @@ actor Connections is Cluster
 
       try
         let inform_msg = ChannelMsgEncoder.inform_joining_worker(_worker_name,
-          _app_name, local_topology.for_new_worker(worker)?, _metrics_host,
-          _metrics_service, consume c_addrs, consume d_addrs,
+          _app_name, local_topology.for_new_worker(worker)?,
+          checkpoint_id, rollback_id, _metrics_host, _metrics_service,
+          consume c_addrs, consume d_addrs,
           local_topology.worker_names, primary_checkpoint_worker,
           partition_blueprints, stateless_partition_blueprints,
           tidr_blueprints, _auth)?

@@ -958,6 +958,18 @@ actor RouterRegistry
       Fail()
     end
 
+  fun ref request_checkpoint_id_for_autoscale() =>
+    let promise = Promise[(CheckpointId, RollbackId)]
+    promise.next[None](_self~update_checkpoint_id_for_autoscale())
+    _checkpoint_initiator.lookup_checkpoint_id(promise)
+
+  be update_checkpoint_id_for_autoscale(ids: (CheckpointId, RollbackId)) =>
+    try
+      (_autoscale as Autoscale).update_checkpoint_id(ids._1, ids._2)
+    else
+      Fail()
+    end
+
   be join_autoscale_barrier_complete() =>
     try
       (_autoscale as Autoscale).grow_autoscale_barrier_complete()
@@ -1009,7 +1021,8 @@ actor RouterRegistry
     end
 
   fun inform_joining_worker(conn: TCPConnection, worker: WorkerName,
-    local_topology: LocalTopology)
+    local_topology: LocalTopology, checkpoint_id: CheckpointId,
+    rollback_id: RollbackId)
   =>
     let state_blueprints =
       recover iso Map[StateName, PartitionRouterBlueprint] end
@@ -1030,7 +1043,7 @@ actor RouterRegistry
     end
 
     _connections.inform_joining_worker(conn, worker, local_topology,
-      _initializer_name, consume state_blueprints,
+      checkpoint_id, rollback_id, _initializer_name, consume state_blueprints,
       consume stateless_blueprints, consume tidr_blueprints)
 
   be inform_contacted_worker_of_initialization(

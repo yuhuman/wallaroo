@@ -257,8 +257,9 @@ primitive ChannelMsgEncoder
 
   // TODO: Update this once new workers become first class citizens
   fun inform_joining_worker(worker_name: String, metric_app_name: String,
-    l_topology: LocalTopology, metric_host: String,
-    metric_service: String, control_addrs: Map[String, (String, String)] val,
+    l_topology: LocalTopology, checkpoint_id: CheckpointId,
+    rollback_id: RollbackId, metric_host: String, metric_service: String,
+    control_addrs: Map[String, (String, String)] val,
     data_addrs: Map[String, (String, String)] val,
     worker_names: Array[String] val, primary_checkpoint_worker: String,
     partition_blueprints: Map[String, PartitionRouterBlueprint] val,
@@ -271,9 +272,10 @@ primitive ChannelMsgEncoder
     This message is sent as a response to a JoinCluster message.
     """
     _encode(InformJoiningWorkerMsg(worker_name, metric_app_name, l_topology,
-      metric_host, metric_service, control_addrs, data_addrs, worker_names,
-      primary_checkpoint_worker, partition_blueprints,
-      stateless_partition_blueprints, target_id_router_blueprints), auth)?
+      checkpoint_id, rollback_id, metric_host, metric_service, control_addrs,
+      data_addrs, worker_names, primary_checkpoint_worker,
+      partition_blueprints, stateless_partition_blueprints,
+      target_id_router_blueprints), auth)?
 
   fun inform_join_error(msg: String, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
@@ -1072,6 +1074,8 @@ class val InformJoiningWorkerMsg is ChannelMsg
   """
   let sender_name: WorkerName
   let local_topology: LocalTopology
+  let checkpoint_id: CheckpointId
+  let rollback_id: CheckpointId
   let metrics_app_name: String
   let metrics_host: String
   let metrics_service: String
@@ -1086,6 +1090,7 @@ class val InformJoiningWorkerMsg is ChannelMsg
   let target_id_router_blueprints: Map[StateName, TargetIdRouterBlueprint] val
 
   new val create(sender: WorkerName, app: String, l_topology: LocalTopology,
+    checkpoint_id': CheckpointId, rollback_id': RollbackId,
     m_host: String, m_service: String,
     c_addrs: Map[WorkerName, (String, String)] val,
     d_addrs: Map[WorkerName, (String, String)] val,
@@ -1097,6 +1102,8 @@ class val InformJoiningWorkerMsg is ChannelMsg
   =>
     sender_name = sender
     local_topology = l_topology
+    checkpoint_id = checkpoint_id'
+    rollback_id = rollback_id'
     metrics_app_name = app
     metrics_host = m_host
     metrics_service = m_service

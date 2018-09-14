@@ -283,9 +283,11 @@ actor Startup
       // initializer.
       let checkpoint_initiator = CheckpointInitiator(auth,
         _startup_options.worker_name, initializer_name, connections,
-        _startup_options.time_between_checkpoints, event_log, barrier_initiator,
-        _checkpoint_ids_file, _startup_options.checkpoints_enabled
+        _startup_options.time_between_checkpoints, event_log,
+        barrier_initiator, _checkpoint_ids_file,
+        _startup_options.checkpoints_enabled
         where is_recovering = _is_recovering)
+      checkpoint_initiator.initialize_checkpoint_id()
       connections.register_disposable(checkpoint_initiator)
 
       let autoscale_initiator = AutoscaleInitiator(
@@ -498,8 +500,11 @@ actor Startup
 
       let checkpoint_initiator = CheckpointInitiator(auth,
         _startup_options.worker_name, m.primary_checkpoint_worker, connections,
-        _startup_options.time_between_checkpoints, event_log, barrier_initiator,
-        _checkpoint_ids_file, _startup_options.checkpoints_enabled)
+        _startup_options.time_between_checkpoints, event_log,
+        barrier_initiator, _checkpoint_ids_file,
+        _startup_options.checkpoints_enabled)
+      checkpoint_initiator.initialize_checkpoint_id(
+        (m.checkpoint_id, m.rollback_id))
 
       let autoscale_initiator = AutoscaleInitiator(
         _startup_options.worker_name, barrier_initiator)

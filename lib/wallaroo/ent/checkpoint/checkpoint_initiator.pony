@@ -69,15 +69,31 @@ actor CheckpointInitiator is Initializable
     _checkpoint_id_file = checkpoint_ids_file
     _is_recovering = is_recovering
     @printf[I32]("!@ CheckpointInitiator: is_recovering: %s\n".cstring(), _is_recovering.string().cstring())
-    if _is_recovering then
+
+  be initialize_checkpoint_id(
+    ids: ((CheckpointId, RollbackId) | None) = None)
+  =>
+    """
+    Passing in ids here means that we are using external information to
+    initialize (like in a join).
+    """
+    match ids
+    | (let cid: CheckpointId, let rid: RollbackId) =>
       ifdef "resilience" then
-        _load_latest_checkpoint_id()
-      end
-    else
-      ifdef "resilience" then
+        _save_checkpoint_id(cid, rid)
         _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
       end
-      _save_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
+    else
+      if _is_recovering then
+        ifdef "resilience" then
+          _load_latest_checkpoint_id()
+        end
+      else
+        ifdef "resilience" then
+          _event_log.write_initial_checkpoint_id(_current_checkpoint_id)
+        end
+        _save_checkpoint_id(_last_complete_checkpoint_id, _last_rollback_id)
+      end
     end
 
   be application_begin_reporting(initializer: LocalTopologyInitializer) =>
@@ -108,6 +124,9 @@ actor CheckpointInitiator is Initializable
 
   be lookup_next_checkpoint_id(p: Promise[CheckpointId]) =>
     p(_last_complete_checkpoint_id + 1)
+
+  be lookup_checkpoint_id(p: Promise[(CheckpointId, RollbackId)]) =>
+    p((_last_complete_checkpoint_id, _last_rollback_id))
 
   be initiate_checkpoint() =>
     _initiate_checkpoint()
