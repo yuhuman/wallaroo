@@ -795,7 +795,7 @@ actor RouterRegistry
     _initiated_stop_the_world = true
     try
       let msg = ChannelMsgEncoder.initiate_stop_the_world_for_join_migration(
-        new_workers, _auth)?
+        _worker_name, new_workers, _auth)?
       _connections.send_control_to_cluster_with_exclusions(msg, new_workers)
     else
       Fail()
@@ -1080,7 +1080,7 @@ actor RouterRegistry
       Fail()
     end
 
-  be remote_stop_the_world_for_join_migration_request(
+  be remote_stop_the_world_for_join_migration_request(coordinator: WorkerName,
     joining_workers: Array[WorkerName] val)
   =>
     """
@@ -1090,9 +1090,10 @@ actor RouterRegistry
     telling them to it's time to stop the world. This behavior is called when
     that message is received.
     """
+    @printf[I32]("!@ REMOTE STOP THE WORLD\n".cstring())
     try
       (_autoscale as Autoscale).stop_the_world_for_join_migration_initiated(
-        joining_workers)
+        coordinator, joining_workers)
     else
       Fail()
     end

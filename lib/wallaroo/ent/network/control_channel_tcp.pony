@@ -370,7 +370,7 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         end
       | let m: InitiateStopTheWorldForJoinMigrationMsg =>
         _router_registry.remote_stop_the_world_for_join_migration_request(
-          m.new_workers)
+          m.sender, m.new_workers)
       | let m: InitiateJoinMigrationMsg =>
         _router_registry.remote_join_migration_request(m.new_workers,
           m.checkpoint_id)

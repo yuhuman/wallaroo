@@ -295,10 +295,11 @@ primitive ChannelMsgEncoder
     _encode(JoiningWorkerInitializedMsg(worker_name, c_addr, d_addr,
       state_routing_ids), auth)?
 
-  fun initiate_stop_the_world_for_join_migration(
+  fun initiate_stop_the_world_for_join_migration(sender: WorkerName,
     new_workers: Array[String] val, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
-    _encode(InitiateStopTheWorldForJoinMigrationMsg(new_workers), auth)?
+    _encode(InitiateStopTheWorldForJoinMigrationMsg(sender, new_workers),
+      auth)?
 
   fun initiate_join_migration(new_workers: Array[String] val,
     checkpoint_id: CheckpointId, auth: AmbientAuth): Array[ByteSeq] val ?
@@ -1129,9 +1130,11 @@ class val JoiningWorkerInitializedMsg is ChannelMsg
     state_routing_ids = s_routing_ids
 
 class val InitiateStopTheWorldForJoinMigrationMsg is ChannelMsg
+  let sender: WorkerName
   let new_workers: Array[String] val
 
-  new val create(ws: Array[String] val) =>
+  new val create(s: WorkerName, ws: Array[String] val) =>
+    sender = s
     new_workers = ws
 
 class val InitiateJoinMigrationMsg is ChannelMsg
