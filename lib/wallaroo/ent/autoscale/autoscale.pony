@@ -66,10 +66,12 @@ class Autoscale
       initial waiting state.
 
     SHRINK (coordinator):
-    1) _InitiatingShrink: RouterRegistry currently handles the details. We're
+    1) _InjectShrinkAutoscaleBarrier: Stop the world and inject barrier to
+       ensure in flight messages are finished
+    2) _InitiatingShrink: RouterRegistry currently handles the details. We're
       waiting until all steps have been migrated from leaving workers.
-    2) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
-    3) _WaitingForAutoscale: Autoscale is complete and we are back to our
+    3) _WaitingForResumeTheWorld: Waiting for unmuting procedure to finish.
+    4) _WaitingForAutoscale: Autoscale is complete and we are back to our
       initial waiting state.
 
     SHRINK (non-coordinator):
@@ -263,15 +265,47 @@ class Autoscale
     _router_registry.all_join_migration_acks_received(joining_workers,
       is_coordinator)
 
+  fun ref inject_shrink_autoscale_barrier(
+    remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    _phase = _InjectShrinkAutoscaleBarrier(this, remaining_workers,
+      leaving_workers)
+    _router_registry.initiate_stop_the_world_for_shrink_migration(
+      remaining_workers, leaving_workers)
+
+  fun ref stop_the_world_for_shrink_migration_initiated(
+    coordinator: WorkerName, remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    _phase.stop_the_world_for_shrink_migration_initiated(coordinator,
+      remaining_workers, leaving_workers)
+
+  fun ref stop_the_world_for_shrink_migration(coordinator: WorkerName,
+    remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    _phase = _ShrinkInProgress(this, remaining_workers, leaving_workers)
+    // TODO: For now, we're handing control of the shrink protocol over to
+    // RouterRegistry at this point. Eventually, we should manage the
+    // entire protocol.
+    _router_registry.stop_the_world_for_shrink_migration(
+      remaining_workers, leaving_workers)
+
+  fun ref shrink_autoscale_barrier_complete() =>
+    _phase.shrink_autoscale_barrier_complete()
+
   fun ref initiate_shrink(remaining_workers: Array[WorkerName] val,
     leaving_workers: Array[WorkerName] val)
   =>
     _phase = _InitiatingShrink(this, remaining_workers, leaving_workers)
+    _router_registry.initiate_shrink(remaining_workers, leaving_workers)
 
-  fun ref prepare_shrink(remaining_workers: Array[WorkerName] val,
-    leaving_workers: Array[WorkerName] val)
-  =>
-    _phase = _ShrinkInProgress(this, remaining_workers, leaving_workers)
+    //!@
+  // fun ref prepare_shrink(remaining_workers: Array[WorkerName] val,
+  //   leaving_workers: Array[WorkerName] val)
+  // =>
+  //   _phase = _ShrinkInProgress(this, remaining_workers, leaving_workers)
 
   fun ref begin_leaving_migration(remaining_workers: Array[WorkerName] val) =>
     _phase = _WaitingForLeavingMigration(this, remaining_workers)
@@ -367,6 +401,17 @@ trait _AutoscalePhase
     _invalid_call()
     Fail()
 
+  fun ref stop_the_world_for_shrink_migration_initiated(
+    coordinator: WorkerName, remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    _invalid_call()
+    Fail()
+
+  fun ref shrink_autoscale_barrier_complete() =>
+    _invalid_call()
+    Fail()
+
   fun ref leaving_worker_finished_migration(worker: WorkerName) =>
     _invalid_call()
     Fail()
@@ -399,6 +444,13 @@ class _WaitingForAutoscale is _AutoscalePhase
     joining_workers: Array[WorkerName] val)
   =>
     _autoscale.stop_the_world_for_join_migration(coordinator, joining_workers)
+
+  fun ref stop_the_world_for_shrink_migration_initiated(
+    coordinator: WorkerName, remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    _autoscale.stop_the_world_for_shrink_migration(coordinator,
+      remaining_workers, leaving_workers)
 
   fun ref worker_join(conn: TCPConnection, worker: WorkerName,
     worker_count: USize, local_topology: LocalTopology,
@@ -813,6 +865,26 @@ class _JoiningWorker is _AutoscalePhase
 /////////////////////////////////////////////////
 // SHRINK PHASES
 /////////////////////////////////////////////////
+class _InjectShrinkAutoscaleBarrier is _AutoscalePhase
+  let _autoscale: Autoscale ref
+  let _remaining_workers: Array[WorkerName] val
+  let _leaving_workers: Array[WorkerName] val
+
+  new create(autoscale: Autoscale ref,
+    remaining_workers: Array[WorkerName] val,
+    leaving_workers: Array[WorkerName] val)
+  =>
+    @printf[I32](("AUTOSCALE: Stopping the world and injecting shrink " +
+      "autoscale barrier.\n").cstring())
+    _autoscale = autoscale
+    _remaining_workers = remaining_workers
+    _leaving_workers = leaving_workers
+
+  fun name(): String => "_InjectShrinkAutoscaleBarrier"
+
+  fun ref shrink_autoscale_barrier_complete() =>
+    _autoscale.initiate_shrink(_remaining_workers, _leaving_workers)
+
 class _InitiatingShrink is _AutoscalePhase
   let _autoscale: Autoscale ref
   let _remaining_workers: Array[WorkerName] val

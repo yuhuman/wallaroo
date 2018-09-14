@@ -322,6 +322,14 @@ primitive ChannelMsgEncoder
     """
     _encode(AutoscaleCompleteMsg, auth)?
 
+  fun initiate_stop_the_world_for_shrink_migration(sender: WorkerName,
+    remaining_workers: Array[String] val,
+    leaving_workers: Array[String] val, auth: AmbientAuth):
+    Array[ByteSeq] val ?
+  =>
+    _encode(InitiateStopTheWorldForShrinkMigrationMsg(sender,
+      remaining_workers, leaving_workers), auth)?
+
   fun leaving_worker_done_migrating(worker_name: String, auth: AmbientAuth):
     Array[ByteSeq] val ?
   =>
@@ -1153,6 +1161,18 @@ class val InitiateJoinMigrationMsg is ChannelMsg
     checkpoint_id = s_id
 
 primitive AutoscaleCompleteMsg is ChannelMsg
+
+class val InitiateStopTheWorldForShrinkMigrationMsg is ChannelMsg
+  let sender: WorkerName
+  let remaining_workers: Array[String] val
+  let leaving_workers: Array[String] val
+
+  new val create(s: WorkerName, r_ws: Array[String] val,
+    l_ws: Array[String] val)
+  =>
+    sender = s
+    remaining_workers = r_ws
+    leaving_workers = l_ws
 
 class val LeavingWorkerDoneMigratingMsg is ChannelMsg
   let worker_name: String

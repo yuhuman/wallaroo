@@ -376,6 +376,9 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           m.checkpoint_id)
       | let m: AutoscaleCompleteMsg =>
         _router_registry.autoscale_complete()
+      | let m: InitiateStopTheWorldForShrinkMigrationMsg =>
+        _router_registry.remote_stop_the_world_for_shrink_migration_request(
+          m.sender, m.remaining_workers, m.leaving_workers)
       | let m: LeavingMigrationAckRequestMsg =>
         match _layout_initializer
         | let lti: LocalTopologyInitializer =>
