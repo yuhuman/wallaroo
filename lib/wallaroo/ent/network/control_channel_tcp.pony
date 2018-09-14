@@ -425,6 +425,7 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
           @printf[I32](("Received PrepareShrinkMsg on Control " +
             "Channel\n").cstring())
         end
+        @printf[I32]("!@ Got PrepareShrinkMsg\n".cstring())
         match _layout_initializer
         | let lti: LocalTopologyInitializer =>
           lti.prepare_shrink(m.remaining_workers, m.leaving_workers)
