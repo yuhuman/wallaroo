@@ -1463,10 +1463,7 @@ actor RouterRegistry
       _prepare_shrink(remaining_workers, leaving_workers)
 
       let promise = Promise[None]
-      promise.next[None]({(_: None) =>
-        _self.announce_leaving_migration(remaining_workers, leaving_workers)})
-      //!@ What goes here??
-      // _autoscale_initiator.initiate_autoscale(promise)
+      _announce_leaving_migration(remaining_workers, leaving_workers)
     end
 
   be prepare_shrink(remaining_workers: Array[WorkerName] val,
@@ -1565,7 +1562,7 @@ actor RouterRegistry
       try_to_resume_processing_immediately()
     end
 
-  be announce_leaving_migration(remaining_workers: Array[WorkerName] val,
+  fun _announce_leaving_migration(remaining_workers: Array[WorkerName] val,
     leaving_workers: Array[WorkerName] val)
   =>
     try
