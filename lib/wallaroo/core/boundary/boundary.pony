@@ -562,10 +562,8 @@ actor OutgoingBoundary is Consumer
     None
 
   be prepare_for_rollback() =>
-    """
-    There is nothing for a Boundary to rollback to.
-    """
-    None
+    _lowest_queue_id = _lowest_queue_id + _queue.size().u64()
+    _queue.clear()
 
   be rollback(payload: ByteSeq val, event_log: EventLog,
     checkpoint_id: CheckpointId)

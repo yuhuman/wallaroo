@@ -210,11 +210,10 @@ actor EventLog
   be prepare_for_rollback(origin: (Recovery | Promise[None]),
     checkpoint_initiator: CheckpointInitiator)
   =>
-    checkpoint_initiator.clear_timers()
+    checkpoint_initiator.prepare_for_rollback()
     for r in _resilients.values() do
       r.prepare_for_rollback()
     end
-    checkpoint_initiator.clear_timers()
     match origin
     | let r: Recovery =>
       //!@ Currently we are immediately moving on without checking for other
