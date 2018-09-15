@@ -511,18 +511,13 @@ class PreStateRunner[In: Any val, Out: Any val, S: State ref]
       match data
       | let input: In =>
         let key = _partition_function(input)
-        match router
-        | let shared_state_router: Router =>
-          let processor: StateComputationWrapper[In, Out, S] =
-            StateComputationWrapper[In, Out, S](input, _state_name, key,
-              _state_comp, _target_ids)
-          shared_state_router.route[StateComputationWrapper[In, Out, S]](
-            metric_name, pipeline_time_spent, processor, producer_id, producer,
-            i_msg_uid, frac_ids, latest_ts, metrics_id + 1,
-            worker_ingress_ts)
-        else
-          Fail()
-        end
+        let processor: StateComputationWrapper[In, Out, S] =
+          StateComputationWrapper[In, Out, S](input, _state_name, key,
+            _state_comp, _target_ids)
+        router.route[StateComputationWrapper[In, Out, S]](
+          metric_name, pipeline_time_spent, processor, producer_id, producer,
+          i_msg_uid, frac_ids, latest_ts, metrics_id + 1,
+          worker_ingress_ts)
       else
         @printf[I32]("StateRunner: Input was not type In!\n"
           .cstring())
