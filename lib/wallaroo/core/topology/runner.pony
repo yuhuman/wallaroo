@@ -520,6 +520,8 @@ class PreStateRunner[In: Any val, Out: Any val, S: State ref]
             metric_name, pipeline_time_spent, processor, producer_id, producer,
             i_msg_uid, frac_ids, latest_ts, metrics_id + 1,
             worker_ingress_ts)
+        else
+          Fail()
         end
       else
         @printf[I32]("StateRunner: Input was not type In!\n"
