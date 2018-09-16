@@ -161,11 +161,14 @@ actor EventLog
 
   fun ref _initiate_checkpoint(checkpoint_id: CheckpointId,
     promise: Promise[CheckpointId],
-    checkpointed_resilients: SetIs[RoutingId] = SetIs[RoutingId])
+    pending_checkpoint_states: Array[_QueuedCheckpointState] =
+      Array[_QueuedCheckpointState])
   =>
     _phase = _CheckpointEventLogPhase(this, checkpoint_id, promise,
-      _resilients, checkpointed_resilients)
-    _phase.check_completion()
+      _resilients)
+    for p in pending_checkpoint_states.values() do
+      _phase.checkpoint_state(p.resilient_id, checkpoint_id, p.payload)
+    end
 
   fun ref _checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)

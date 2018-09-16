@@ -243,7 +243,7 @@ actor KafkaSink is (Sink & KafkaClientManager & KafkaProducer)
   be register_producer(id: RoutingId, producer: Producer) =>
     // @printf[I32]("!@ Registered producer %s at sink %s. Total %s upstreams.\n".cstring(), id.string().cstring(), _sink_id.string().cstring(), _upstreams.size().string().cstring())
     // If we have at least one input, then we are involved in checkpointing.
-    if _inputs.size() > 0 then
+    if _inputs.size() == 0 then
       _barrier_initiator.register_sink(this)
       _event_log.register_resilient(_sink_id, this)
     end
