@@ -50,17 +50,13 @@ class _CheckpointingPhase is _CheckpointInitiatorPhase
   let _c_initiator: CheckpointInitiator ref
   var _barrier_complete: Bool = false
   var _event_log_checkpoints_complete: Bool = false
-  let _workers: SetIs[WorkerName] = _workers.create()
   let _acked_workers: SetIs[WorkerName] = _acked_workers.create()
 
   new create(token: CheckpointBarrierToken,
-    c_initiator: CheckpointInitiator ref, workers: _StringSet box)
+    c_initiator: CheckpointInitiator ref)
   =>
     _token = token
     _c_initiator = c_initiator
-    for w in workers.values() do
-      _workers.set(w)
-    end
 
   fun name(): String => "_CheckpointingPhase"
 
@@ -77,36 +73,30 @@ class _CheckpointingPhase is _CheckpointInitiatorPhase
     @printf[I32]("!@ _CheckpointingPhase: event_log_checkpoints_complete from %s for %s\n".cstring(), worker.cstring(), checkpoint_id.string().cstring())
     ifdef debug then
       Invariant(checkpoint_id == _token.id)
-      Invariant(SetHelpers[WorkerName].contains[WorkerName](_workers, worker))
+      Invariant(_c_initiator.workers().contains(worker))
     end
     _acked_workers.set(worker)
-    @printf[I32]("!@ _CheckpointingPhase: acked_workers: %s, workers: %s\n".cstring(), _acked_workers.size().string().cstring(), _workers.size().string().cstring())
-    if (_acked_workers.size() == _workers.size()) then
+    @printf[I32]("!@ _CheckpointingPhase: acked_workers: %s, workers: %s\n".cstring(), _acked_workers.size().string().cstring(), _c_initiator.workers().size().string().cstring())
+    if (_acked_workers.size() == _c_initiator.workers().size()) then
       _event_log_checkpoints_complete = true
       _check_completion()
     end
 
   fun ref _check_completion() =>
     if _barrier_complete and _event_log_checkpoints_complete then
-      let ws = recover iso Array[WorkerName] end
-      for w in _workers.values() do
-        ws.push(w)
-      end
-      _c_initiator.event_log_write_checkpoint_id(_token.id, _token, consume ws)
+      _c_initiator.event_log_write_checkpoint_id(_token.id, _token)
     end
 
 class _WaitingForEventLogIdWrittenPhase is _CheckpointInitiatorPhase
   let _token: CheckpointBarrierToken
   let _c_initiator: CheckpointInitiator ref
-  let _workers: Array[WorkerName] val
   let _acked_workers: SetIs[WorkerName] = _acked_workers.create()
 
   new create(token: CheckpointBarrierToken,
-    c_initiator: CheckpointInitiator ref, workers: Array[WorkerName] val)
+    c_initiator: CheckpointInitiator ref)
   =>
     _token = token
     _c_initiator = c_initiator
-    _workers = workers
 
   fun name(): String => "_WaitingForEventLogIdWrittenPhase"
 
@@ -116,11 +106,10 @@ class _WaitingForEventLogIdWrittenPhase is _CheckpointInitiatorPhase
     @printf[I32]("!@ _WaitingForEventLogIdWrittenPhase: event_log_id_written from %s for %s\n".cstring(), worker.cstring(), checkpoint_id.string().cstring())
     ifdef debug then
       Invariant(checkpoint_id == _token.id)
-      Invariant(ArrayHelpers[WorkerName].contains[WorkerName](_workers,
-        worker))
+      Invariant(_c_initiator.workers().contains(worker))
     end
     _acked_workers.set(worker)
-    @printf[I32]("!@ _WaitingForEventLogIdWrittenPhase: acked_workers: %s, workers: %s\n".cstring(), _acked_workers.size().string().cstring(), _workers.size().string().cstring())
-    if (_acked_workers.size() == _workers.size()) then
+    @printf[I32]("!@ _WaitingForEventLogIdWrittenPhase: acked_workers: %s, workers: %s\n".cstring(), _acked_workers.size().string().cstring(), _c_initiator.workers().size().string().cstring())
+    if (_acked_workers.size() == _c_initiator.workers().size()) then
       _c_initiator.checkpoint_complete(_token)
     end

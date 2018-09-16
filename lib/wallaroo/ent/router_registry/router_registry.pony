@@ -1193,7 +1193,8 @@ actor RouterRegistry
     // Update BarrierInitiator about new workers
     for w in target_workers.values() do
       _barrier_initiator.add_worker(w)
-      _checkpoint_initiator.add_worker(w)
+      //!@
+      // _checkpoint_initiator.add_worker(w)
     end
 
     // Inform other current workers to begin migration
@@ -1292,6 +1293,9 @@ actor RouterRegistry
       else
         Fail()
       end
+    end
+    for w in joining_workers.values() do
+      _checkpoint_initiator.add_worker(w)
     end
     _connections.request_cluster_unmute()
     _unmute_request(_worker_name)

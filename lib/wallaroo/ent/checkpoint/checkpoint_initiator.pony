@@ -118,6 +118,8 @@ actor CheckpointInitiator is Initializable
     end
     _is_recovering = false
 
+  fun workers(): _StringSet box => _workers
+
   be add_worker(w: String) =>
     @printf[I32]("!@ CheckpointInitiator: add_worker %s\n".cstring(), w.cstring())
     _workers.set(w)
@@ -165,7 +167,7 @@ actor CheckpointInitiator is Initializable
         recover this~checkpoint_barrier_complete() end)
       _barrier_initiator.inject_barrier(token, barrier_promise)
 
-      _phase = _CheckpointingPhase(token, this, _workers)
+      _phase = _CheckpointingPhase(token, this)
     end
 
   be resume_checkpoint() =>
@@ -221,7 +223,7 @@ actor CheckpointInitiator is Initializable
     end
 
   fun ref event_log_write_checkpoint_id(checkpoint_id: CheckpointId,
-    token: CheckpointBarrierToken, workers: Array[WorkerName] val)
+    token: CheckpointBarrierToken)
   =>
     @printf[I32]("!@ CheckpointInitiator: event_log_write_checkpoint_id()\n".cstring())
     let promise = Promise[CheckpointId]
@@ -232,7 +234,7 @@ actor CheckpointInitiator is Initializable
     try
       let msg = ChannelMsgEncoder.event_log_write_checkpoint_id(
         checkpoint_id, _worker_name, _auth)?
-      for w in workers.values() do
+      for w in _workers.values() do
         if w != _worker_name then
           _connections.send_control(w, msg)
         end
@@ -241,7 +243,7 @@ actor CheckpointInitiator is Initializable
       Fail()
     end
 
-    _phase = _WaitingForEventLogIdWrittenPhase(token, this, workers)
+    _phase = _WaitingForEventLogIdWrittenPhase(token, this)
 
   fun ref checkpoint_complete(token: BarrierToken) =>
     if not _checkpoints_paused then
