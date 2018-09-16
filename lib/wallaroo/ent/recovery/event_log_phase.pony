@@ -181,7 +181,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
 
   fun ref state_checkpointed(resilient_id: RoutingId) =>
     _checkpointed_resilients.set(resilient_id)
-    _check_completion()
+    check_completion()
 
   fun ref check_completion() =>
     if _checkpointed_resilients.size() == _resilients.size() then
