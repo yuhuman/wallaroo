@@ -105,7 +105,7 @@ class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
     promise: Promise[CheckpointId], event_log: EventLog ref)
   =>
     //!@
-    if checkpoint_id != next_checkpoint_id then
+    if checkpoint_id != _next_checkpoint_id then
       @printf[I32]("!@ _WaitingForCheckpointInitiationEventLogPhase: Thought we were on checkpoint %s but really on %s with %s resilients checkpointed\n".cstring(), _next_checkpoint_id.string().cstring(), checkpoint_id.string().cstring(), _checkpointed_resilients.size().string().cstring())
       Fail()
     end
