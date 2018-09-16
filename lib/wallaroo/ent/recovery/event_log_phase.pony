@@ -94,7 +94,7 @@ class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
   new create(next_checkpoint_id: CheckpointId, event_log: EventLog ref) =>
     _next_checkpoint_id = next_checkpoint_id
     _event_log = event_log
-    @printf[I32]("!@ Transition to _WaitingForCheckpointInitiationEventLogPhase: checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
+    @printf[I32]("!@ Transition to _WaitingForCheckpointInitiationEventLogPhase: checkpoint_id %s\n".cstring(), next_checkpoint_id.string().cstring())
 
   // TODO: This should only be called once at the beginning of the application
   // lifecycle and needs to be handled elsewhere.
