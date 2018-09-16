@@ -159,7 +159,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
     end
     _resilients = consume rs
     _checkpointed_resilients = checkpointed_resilients
-    @printf[I32]("!@ Transition to _CheckpointEventLogPhase: checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
+    @printf[I32]("!@ Transition to _CheckpointEventLogPhase: checkpoint_id %s with %s resilients already checkpointed and %s total\n".cstring(), checkpoint_id.string().cstring(), _checkpointed_resilients.size().string().cstring(), _resilients.size().string().cstring())
 
   fun name(): String => "_CheckpointEventLogPhase"
 
