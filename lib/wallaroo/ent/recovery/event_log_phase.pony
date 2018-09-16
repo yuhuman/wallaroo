@@ -121,9 +121,7 @@ class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
         _next_checkpoint_id.string().cstring())
     end
 
-    if payload.size() > 0 then
-      _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
-    end
+    _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
 
   fun ref state_checkpointed(resilient_id: RoutingId) =>
     // We might get some successful state checkpoints before we receive the
@@ -175,9 +173,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
         _checkpoint_id.string().cstring())
     end
 
-    if payload.size() > 0 then
-      _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
-    end
+    _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
 
   fun ref state_checkpointed(resilient_id: RoutingId) =>
     _checkpointed_resilients.set(resilient_id)

@@ -170,7 +170,9 @@ actor EventLog
   fun ref _checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
   =>
-    _queue_log_entry(resilient_id, checkpoint_id, payload)
+    if payload.size() > 0 then
+      _queue_log_entry(resilient_id, checkpoint_id, payload)
+    end
     _phase.state_checkpointed(resilient_id)
 
   fun ref _queue_log_entry(resilient_id: RoutingId,
