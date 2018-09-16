@@ -31,7 +31,7 @@ trait _EventLogPhase
   fun ref checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
   =>
-    @printf[I32]("!@ BAD: checkpoint_state() for checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
+    @printf[I32]("!@ BAD: checkpoint_state() for resilient %s, checkpoint_id %s\n".cstring(), resilient_id.string().cstring(), checkpoint_id.string().cstring())
 
     _invalid_call()
     Fail()
@@ -109,7 +109,7 @@ class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
   fun ref checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
   =>
-    @printf[I32]("!@ _WaitingForCheckpointInitiationEventLogPhase: checkpoint_state() for checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
+    @printf[I32]("!@ _WaitingForCheckpointInitiationEventLogPhase: checkpoint_state() for resilient %s, checkpoint_id %s\n".cstring(), resilient_id.string().cstring(), checkpoint_id.string().cstring())
 
     ifdef debug then
       if checkpoint_id != _next_checkpoint_id then
@@ -164,7 +164,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
   fun ref checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
   =>
-    @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_state() for checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
+    @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_state() for resilient %s, checkpoint_id %s\n".cstring(), resilient_id.string().cstring(), checkpoint_id.string().cstring())
 
     ifdef debug then
       Invariant(checkpoint_id == _checkpoint_id)
