@@ -488,10 +488,24 @@ class ControlChannelConnectNotifier is TCPConnectionNotify
         })
         _event_log.initiate_checkpoint(m.checkpoint_id, promise)
       | let m: EventLogWriteCheckpointIdMsg =>
-        _event_log.write_checkpoint_id(m.checkpoint_id)
+        let promise = Promise[CheckpointId]
+        promise.next[None]({(s_id: CheckpointId) =>
+          try
+            let msg = ChannelMsgEncoder.event_log_ack_checkpoint_id_written(
+              s_id, _worker_name, _auth)?
+            _connections.send_control(m.sender, msg)
+          else
+            Fail()
+          end
+        })
+        _event_log.write_checkpoint_id(m.checkpoint_id, promise)
       | let m: EventLogAckCheckpointMsg =>
         @printf[I32]("!@ Rcvd EventLogAckCheckpointMsg!!!\n".cstring())
         _checkpoint_initiator.event_log_checkpoint_complete(m.sender,
+          m.checkpoint_id)
+      | let m: EventLogAckCheckpointIdWrittenMsg =>
+        @printf[I32]("!@ Rcvd EventLogAckCheckpointIdWrittenMsg!!!\n".cstring())
+        _checkpoint_initiator.event_log_id_written(m.sender,
           m.checkpoint_id)
       | let m: CommitCheckpointIdMsg =>
         _checkpoint_initiator.commit_checkpoint_id(m.checkpoint_id, m.rollback_id,

@@ -241,7 +241,7 @@ actor Startup
 
       _event_log = ifdef "resilience" then
         if _startup_options.log_rotation then
-          EventLog(_startup_options.worker_name,
+          EventLog(auth, _startup_options.worker_name,
             EventLogConfig(event_log_dir_filepath,
             _event_log_file_basename
             where backend_file_length' =
@@ -249,7 +249,7 @@ actor Startup
             suffix' = _event_log_file_suffix, log_rotation' = true,
             is_recovering' = _is_recovering))
         else
-          EventLog(_startup_options.worker_name,
+          EventLog(auth, _startup_options.worker_name,
             EventLogConfig(event_log_dir_filepath,
             _event_log_file_basename + _event_log_file_suffix
             where backend_file_length' =
@@ -257,7 +257,7 @@ actor Startup
               is_recovering' = _is_recovering))
         end
       else
-        EventLog(_startup_options.worker_name,
+        EventLog(auth, _startup_options.worker_name,
           EventLogConfig(where is_recovering' = _is_recovering))
       end
       let event_log = _event_log as EventLog
@@ -465,21 +465,21 @@ actor Startup
       let event_log_dir_filepath = _event_log_dir_filepath as FilePath
       _event_log = ifdef "resilience" then
         if _startup_options.log_rotation then
-          EventLog(_startup_options.worker_name,
+          EventLog(auth, _startup_options.worker_name,
             EventLogConfig(event_log_dir_filepath,
             _event_log_file_basename
             where backend_file_length' =
               _startup_options.event_log_file_length,
             suffix' = _event_log_file_suffix, log_rotation' = true))
         else
-          EventLog(_startup_options.worker_name,
+          EventLog(auth, _startup_options.worker_name,
             EventLogConfig(event_log_dir_filepath,
             _event_log_file_basename + _event_log_file_suffix
             where backend_file_length' =
               _startup_options.event_log_file_length))
         end
       else
-        EventLog(_startup_options.worker_name)
+        EventLog(auth, _startup_options.worker_name)
       end
       let event_log = _event_log as EventLog
 

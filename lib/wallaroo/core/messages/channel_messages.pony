@@ -455,13 +455,13 @@ primitive ChannelMsgEncoder
   =>
     _encode(BarrierCompleteMsg(token), auth)?
 
-  fun event_log_initiate_checkpoint(checkpoint_id: CheckpointId, sender: String,
-    auth: AmbientAuth): Array[ByteSeq] val ?
+  fun event_log_initiate_checkpoint(checkpoint_id: CheckpointId,
+    sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     _encode(EventLogInitiateCheckpointMsg(checkpoint_id, sender), auth)?
 
-  fun event_log_write_checkpoint_id(checkpoint_id: CheckpointId, sender: String,
-    auth: AmbientAuth): Array[ByteSeq] val ?
+  fun event_log_write_checkpoint_id(checkpoint_id: CheckpointId,
+    sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
   =>
     _encode(EventLogWriteCheckpointIdMsg(checkpoint_id, sender), auth)?
 
@@ -470,8 +470,14 @@ primitive ChannelMsgEncoder
   =>
     _encode(EventLogAckCheckpointMsg(checkpoint_id, sender), auth)?
 
-  fun commit_checkpoint_id(checkpoint_id: CheckpointId, rollback_id: RollbackId,
-    sender: WorkerName, auth: AmbientAuth): Array[ByteSeq] val ?
+  fun event_log_ack_checkpoint_id_written(checkpoint_id: CheckpointId,
+    sender: String, auth: AmbientAuth): Array[ByteSeq] val ?
+  =>
+    _encode(EventLogAckCheckpointIdWrittenMsg(checkpoint_id, sender), auth)?
+
+  fun commit_checkpoint_id(checkpoint_id: CheckpointId,
+    rollback_id: RollbackId, sender: WorkerName, auth: AmbientAuth):
+    Array[ByteSeq] val ?
   =>
     _encode(CommitCheckpointIdMsg(checkpoint_id, rollback_id, sender), auth)?
 
@@ -1340,6 +1346,14 @@ class val EventLogWriteCheckpointIdMsg is ChannelMsg
     sender = sender'
 
 class val EventLogAckCheckpointMsg is ChannelMsg
+  let checkpoint_id: CheckpointId
+  let sender: WorkerName
+
+  new val create(checkpoint_id': CheckpointId, sender': WorkerName) =>
+    checkpoint_id = checkpoint_id'
+    sender = sender'
+
+class val EventLogAckCheckpointIdWrittenMsg is ChannelMsg
   let checkpoint_id: CheckpointId
   let sender: WorkerName
 

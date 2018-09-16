@@ -70,6 +70,7 @@ actor CheckpointInitiator is Initializable
     _checkpoint_id_file = checkpoint_ids_file
     _is_recovering = is_recovering
     @printf[I32]("!@ CheckpointInitiator: is_recovering: %s\n".cstring(), _is_recovering.string().cstring())
+    _event_log.set_checkpoint_initiator(this)
 
   be initialize_checkpoint_id(
     ids: ((CheckpointId, RollbackId) | None) = None)
@@ -164,7 +165,7 @@ actor CheckpointInitiator is Initializable
         recover this~checkpoint_barrier_complete() end)
       _barrier_initiator.inject_barrier(token, barrier_promise)
 
-      _phase = _ActiveCheckpointInitiatorPhase(token, this, _workers)
+      _phase = _CheckpointingPhase(token, this, _workers)
     end
 
   be resume_checkpoint() =>
@@ -205,6 +206,9 @@ actor CheckpointInitiator is Initializable
     end
     _phase.event_log_checkpoint_complete(worker, checkpoint_id)
 
+  be event_log_id_written(worker: WorkerName, checkpoint_id: CheckpointId) =>
+    _phase.event_log_id_written(worker, checkpoint_id)
+
   be inform_recovering_worker(w: WorkerName, conn: TCPConnection) =>
     try
       @printf[I32]("Sending recovery data to %\n".cstring(),
@@ -217,10 +221,13 @@ actor CheckpointInitiator is Initializable
     end
 
   fun ref event_log_write_checkpoint_id(checkpoint_id: CheckpointId,
-    workers: Array[WorkerName] val)
+    token: CheckpointBarrierToken, workers: Array[WorkerName] val)
   =>
     @printf[I32]("!@ CheckpointInitiator: event_log_write_checkpoint_id()\n".cstring())
-    _event_log.write_checkpoint_id(checkpoint_id)
+    let promise = Promise[CheckpointId]
+    promise.next[None](
+      recover this~event_log_id_written(_worker_name) end)
+    _event_log.write_checkpoint_id(checkpoint_id, promise)
 
     try
       let msg = ChannelMsgEncoder.event_log_write_checkpoint_id(
@@ -233,6 +240,8 @@ actor CheckpointInitiator is Initializable
     else
       Fail()
     end
+
+    _phase = _WaitingForEventLogIdWrittenPhase(token, this, workers)
 
   fun ref checkpoint_complete(token: BarrierToken) =>
     if not _checkpoints_paused then

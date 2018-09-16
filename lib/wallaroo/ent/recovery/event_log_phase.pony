@@ -34,15 +34,23 @@ trait _EventLogPhase
     _invalid_call()
     Fail()
 
+  fun ref state_checkpointed(resilient_id: RoutingId) =>
+    _invalid_call()
+    Fail()
+
   fun ref write_initial_checkpoint_id(checkpoint_id: CheckpointId) =>
     _invalid_call()
     Fail()
 
-  fun ref write_checkpoint_id(checkpoint_id: CheckpointId) =>
+  fun ref write_checkpoint_id(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
     _invalid_call()
     Fail()
 
-  fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
+  fun ref checkpoint_id_written(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
     _invalid_call()
     Fail()
 
@@ -58,6 +66,10 @@ trait _EventLogPhase
     _invalid_call()
     Fail()
 
+  fun ref check_completion() =>
+    _invalid_call()
+    Fail()
+
   fun _invalid_call() =>
     @printf[I32]("Invalid call on event log phase %s\n".cstring(),
       name().cstring())
@@ -70,21 +82,27 @@ class _InitialEventLogPhase is _EventLogPhase
   =>
     event_log._initiate_checkpoint(checkpoint_id, promise)
 
-class _NormalEventLogPhase is _EventLogPhase
+class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
   let _next_checkpoint_id: CheckpointId
   let _event_log: EventLog ref
+
+  let _checkpointed_resilients: SetIs[RoutingId] =
+    _checkpointed_resilients.create()
 
   new create(next_checkpoint_id: CheckpointId, event_log: EventLog ref) =>
     _next_checkpoint_id = next_checkpoint_id
     _event_log = event_log
 
+  // TODO: This should only be called once at the beginning of the application
+  // lifecycle and needs to be handled elsewhere.
+  fun ref write_initial_checkpoint_id(checkpoint_id: CheckpointId) =>
+    _event_log._write_initial_checkpoint_id(checkpoint_id)
+
   fun ref initiate_checkpoint(checkpoint_id: CheckpointId,
     promise: Promise[CheckpointId], event_log: EventLog ref)
   =>
-    event_log._initiate_checkpoint(checkpoint_id, promise)
-
-  fun ref write_initial_checkpoint_id(checkpoint_id: CheckpointId) =>
-    _event_log._write_checkpoint_id(checkpoint_id)
+    event_log._initiate_checkpoint(checkpoint_id, promise,
+      _checkpointed_resilients)
 
   fun ref checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
@@ -107,10 +125,96 @@ class _NormalEventLogPhase is _EventLogPhase
       _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
     end
 
-  fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
-    _event_log.update_normal_event_log_checkpoint_id(checkpoint_id)
+  fun ref state_checkpointed(resilient_id: RoutingId) =>
+    // We might get some successful state checkpoints before we receive the
+    // initiate_checkpoint message, so we hold on to them for now.
+    _checkpointed_resilients.set(resilient_id)
 
-  fun name(): String => "_NormalEventLogPhase"
+//!@
+  // fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
+  //   _event_log.update_normal_event_log_checkpoint_id(checkpoint_id)
+
+  fun name(): String => "_WaitingForCheckpointInitiationEventLogPhase"
+
+class _CheckpointEventLogPhase is _EventLogPhase
+  let _event_log: EventLog ref
+  let _checkpoint_id: CheckpointId
+  let _promise: Promise[CheckpointId]
+
+  let _resilients: SetIs[RoutingId] val
+  let _checkpointed_resilients: SetIs[RoutingId]
+
+  new create(event_log: EventLog ref, checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId],
+    resilients: Map[RoutingId, Resilient],
+    checkpointed_resilients: SetIs[RoutingId])
+  =>
+    _event_log = event_log
+    _checkpoint_id = checkpoint_id
+    _promise = promise
+    let rs = recover iso SetIs[RoutingId] end
+    for id in resilients.keys() do
+      rs.set(id)
+    end
+    _resilients = consume rs
+    _checkpointed_resilients = checkpointed_resilients
+
+  fun name(): String => "_CheckpointEventLogPhase"
+
+  fun ref checkpoint_state(resilient_id: RoutingId,
+    checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
+  =>
+    // @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_state()\n".cstring())
+
+    ifdef debug then
+      Invariant(checkpoint_id == _checkpoint_id)
+    end
+    ifdef "trace" then
+      @printf[I32]("Checkpointing state for resilient %s, checkpoint id %s\n"
+        .cstring(), resilient_id.string().cstring(),
+        _checkpoint_id.string().cstring())
+    end
+
+    if payload.size() > 0 then
+      _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
+    end
+
+  fun ref state_checkpointed(resilient_id: RoutingId) =>
+    _checkpointed_resilients.set(resilient_id)
+
+  fun ref check_completion() =>
+    if _checkpointed_resilients.size() == _resilients.size() then
+      _promise(_checkpoint_id)
+      _event_log.state_checkpoints_complete(_checkpoint_id)
+    end
+
+class _WaitingForWriteIdEventLogPhase is _EventLogPhase
+  let _event_log: EventLog ref
+  let _checkpoint_id: CheckpointId
+
+  new create(event_log: EventLog ref, checkpoint_id: CheckpointId) =>
+    _event_log = event_log
+    _checkpoint_id = checkpoint_id
+
+  fun name(): String => "_WaitingForWriteIdEventLogPhase"
+
+  fun ref write_checkpoint_id(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
+    ifdef debug then
+      Invariant(checkpoint_id == _checkpoint_id)
+    end
+    _event_log._write_checkpoint_id(checkpoint_id, promise)
+
+  fun ref checkpoint_id_written(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
+    // @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_id_written()\n".cstring())
+    ifdef debug then
+      Invariant(checkpoint_id == _checkpoint_id)
+    end
+    promise(checkpoint_id)
+    _event_log.checkpoint_id_written(checkpoint_id)
 
 class _RecoveringEventLogPhase is _EventLogPhase
   let _event_log: EventLog ref
@@ -131,57 +235,6 @@ class _RecoveringEventLogPhase is _EventLogPhase
   =>
     @printf[I32](("EventLog: Recovering so ignoring checkpoint state for " +
       "resilient %s\n").cstring(), resilient_id.string().cstring())
-
-class _CheckpointEventLogPhase is _EventLogPhase
-  let _event_log: EventLog ref
-  let _checkpoint_id: CheckpointId
-  let _promise: Promise[CheckpointId]
-
-  new create(event_log: EventLog ref, checkpoint_id: CheckpointId,
-    promise: Promise[CheckpointId])
-  =>
-    _event_log = event_log
-    _checkpoint_id = checkpoint_id
-    _promise = promise
-
-  fun name(): String => "_CheckpointEventLogPhase"
-
-  fun ref initiate_checkpoint(checkpoint_id: CheckpointId,
-    promise: Promise[CheckpointId], event_log: EventLog ref)
-  =>
-    event_log._initiate_checkpoint(checkpoint_id, promise)
-
-  fun ref checkpoint_state(resilient_id: RoutingId,
-    checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
-  =>
-    // @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_state()\n".cstring())
-
-    ifdef debug then
-      Invariant(checkpoint_id == _checkpoint_id)
-    end
-    ifdef "trace" then
-      @printf[I32]("Checkpointing state for resilient %s, checkpoint id %s\n"
-        .cstring(), resilient_id.string().cstring(),
-        _checkpoint_id.string().cstring())
-    end
-
-    if payload.size() > 0 then
-      _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
-    end
-
-  fun ref write_checkpoint_id(checkpoint_id: CheckpointId) =>
-    ifdef debug then
-      Invariant(checkpoint_id == _checkpoint_id)
-    end
-    _event_log._write_checkpoint_id(checkpoint_id)
-
-  fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
-    // @printf[I32]("!@ _CheckpointEventLogPhase: checkpoint_id_written()\n".cstring())
-    ifdef debug then
-      Invariant(checkpoint_id == _checkpoint_id)
-    end
-    _promise(checkpoint_id)
-    _event_log.checkpoint_complete(checkpoint_id)
 
 class _RollbackEventLogPhase is _EventLogPhase
   let _event_log: EventLog ref

@@ -55,6 +55,7 @@ class val EventLogConfig
     is_recovering = is_recovering'
 
 actor EventLog
+  let _auth: AmbientAuth
   let _worker_name: WorkerName
   let _resilients: Map[RoutingId, Resilient] = _resilients.create()
   var _backend: Backend = EmptyBackend
@@ -62,6 +63,7 @@ actor EventLog
     _replay_complete_markers.create()
   let _config: EventLogConfig
   var _barrier_initiator: (BarrierInitiator | None) = None
+  var _checkpoint_initiator: (CheckpointInitiator | None) = None
   var num_encoded: USize = 0
   var _flush_waiting: USize = 0
   //!@ I don't think we need this
@@ -77,9 +79,10 @@ actor EventLog
 
   var _log_rotation_id: LogRotationId = 0
 
-  new create(worker: WorkerName,
+  new create(auth: AmbientAuth, worker: WorkerName,
     event_log_config: EventLogConfig = EventLogConfig())
   =>
+    _auth = auth
     _worker_name = worker
     _config = event_log_config
     _backend_bytes_after_checkpoint = _backend.bytes_written()
@@ -116,11 +119,14 @@ actor EventLog
       if _config.is_recovering then
         _RecoveringEventLogPhase(this)
       else
-        _NormalEventLogPhase(1, this)
+        _WaitingForCheckpointInitiationEventLogPhase(1, this)
       end
 
   be set_barrier_initiator(barrier_initiator: BarrierInitiator) =>
     _barrier_initiator = barrier_initiator
+
+  be set_checkpoint_initiator(checkpoint_initiator: CheckpointInitiator) =>
+    _checkpoint_initiator = checkpoint_initiator
 
   be quick_initialize(initializer: LocalTopologyInitializer) =>
     _initialized = true
@@ -154,14 +160,18 @@ actor EventLog
     _phase.checkpoint_state(resilient_id, checkpoint_id, payload)
 
   fun ref _initiate_checkpoint(checkpoint_id: CheckpointId,
-    promise: Promise[CheckpointId])
+    promise: Promise[CheckpointId],
+    checkpointed_resilients: SetIs[RoutingId] = SetIs[RoutingId])
   =>
-    _phase = _CheckpointEventLogPhase(this, checkpoint_id, promise)
+    _phase = _CheckpointEventLogPhase(this, checkpoint_id, promise,
+      _resilients, checkpointed_resilients)
+    _phase.check_completion()
 
   fun ref _checkpoint_state(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val)
   =>
     _queue_log_entry(resilient_id, checkpoint_id, payload)
+    _phase.state_checkpointed(resilient_id)
 
   fun ref _queue_log_entry(resilient_id: RoutingId,
     checkpoint_id: CheckpointId, payload: Array[ByteSeq] val,
@@ -183,26 +193,41 @@ actor EventLog
       None
     end
 
+  fun ref state_checkpoints_complete(checkpoint_id: CheckpointId) =>
+    _phase = _WaitingForWriteIdEventLogPhase(this, checkpoint_id)
+
   be write_initial_checkpoint_id(checkpoint_id: CheckpointId) =>
     _phase.write_initial_checkpoint_id(checkpoint_id)
 
-  be write_checkpoint_id(checkpoint_id: CheckpointId) =>
-    _phase.write_checkpoint_id(checkpoint_id)
+  fun ref _write_initial_checkpoint_id(checkpoint_id: CheckpointId) =>
+    _backend.encode_checkpoint_id(checkpoint_id)
+    checkpoint_id_written(checkpoint_id)
 
-  fun ref _write_checkpoint_id(checkpoint_id: CheckpointId) =>
+  be write_checkpoint_id(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
+    _phase.write_checkpoint_id(checkpoint_id, promise)
+
+  fun ref _write_checkpoint_id(checkpoint_id: CheckpointId,
+    promise: Promise[CheckpointId])
+  =>
     // @printf[I32]("!@ EventLog: write_checkpoint_id\n".cstring())
     _backend.encode_checkpoint_id(checkpoint_id)
-    _phase.checkpoint_id_written(checkpoint_id)
+    _phase.checkpoint_id_written(checkpoint_id, promise)
 
-  fun ref update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
-  =>
-    // We need to update the next checkpoint id we're expecting.
-    _phase = _NormalEventLogPhase(checkpoint_id + 1, this)
+//!@
+  // fun ref update_normal_event_log_checkpoint_id(checkpoint_id: CheckpointId)
+  // =>
+  //   // We need to update the next checkpoint id we're expecting.
+  //   //!@ This should go through a phase
+  //   _phase = _WaitingForCheckpointInitiationEventLogPhase(
+  //  checkpoint_id + 1, this)
 
-  fun ref checkpoint_complete(checkpoint_id: CheckpointId) =>
+  fun ref checkpoint_id_written(checkpoint_id: CheckpointId) =>
     // @printf[I32]("!@ EventLog: checkpoint_complete()\n".cstring())
     write_log()
-    _phase = _NormalEventLogPhase(checkpoint_id + 1, this)
+    _phase = _WaitingForCheckpointInitiationEventLogPhase(checkpoint_id + 1,
+      this)
 
   /////////////////
   // ROLLBACK
@@ -258,7 +283,8 @@ actor EventLog
     _phase.ack_rollback(resilient_id)
 
   fun ref rollback_complete(checkpoint_id: CheckpointId) =>
-    _phase = _NormalEventLogPhase(checkpoint_id + 1, this)
+    _phase = _WaitingForCheckpointInitiationEventLogPhase(checkpoint_id + 1,
+      this)
 
 
 
