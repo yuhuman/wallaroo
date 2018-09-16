@@ -94,6 +94,7 @@ class _WaitingForCheckpointInitiationEventLogPhase is _EventLogPhase
   new create(next_checkpoint_id: CheckpointId, event_log: EventLog ref) =>
     _next_checkpoint_id = next_checkpoint_id
     _event_log = event_log
+    @printf[I32]("!@ Transition to _WaitingForCheckpointInitiationEventLogPhase: checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
 
   // TODO: This should only be called once at the beginning of the application
   // lifecycle and needs to be handled elsewhere.
@@ -158,6 +159,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
     end
     _resilients = consume rs
     _checkpointed_resilients = checkpointed_resilients
+    @printf[I32]("!@ Transition to _CheckpointEventLogPhase: checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
 
   fun name(): String => "_CheckpointEventLogPhase"
 
@@ -194,6 +196,7 @@ class _WaitingForWriteIdEventLogPhase is _EventLogPhase
   new create(event_log: EventLog ref, checkpoint_id: CheckpointId) =>
     _event_log = event_log
     _checkpoint_id = checkpoint_id
+    @printf[I32]("!@ Transition to _WaitingForWriteIdEventLogPhase: checkpoint_id %s\n".cstring(), checkpoint_id.string().cstring())
 
   fun name(): String => "_WaitingForWriteIdEventLogPhase"
 
