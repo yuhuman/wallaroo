@@ -174,6 +174,7 @@ class _CheckpointEventLogPhase is _EventLogPhase
         .cstring(), resilient_id.string().cstring(),
         _checkpoint_id.string().cstring())
     end
+    _checkpointed_resilients.set(resilient_id)
 
     if payload.size() > 0 then
       _event_log._checkpoint_state(resilient_id, checkpoint_id, payload)
